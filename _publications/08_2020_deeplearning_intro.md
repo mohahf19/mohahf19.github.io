@@ -2,7 +2,6 @@
 title: "Deep Learning Introduction And Applications"
 collection: writeups
 date: 2020-08-25
-venue: false
 share: false
 permalink: /writeups/deep_learning_intro
 paperurl: https://mohahf19.github.io/files/deep_learning_intro.pdf
