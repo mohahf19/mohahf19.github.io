@@ -4,4 +4,4 @@ collection: writeups
 paperurl: https://mohahf19.github.io/files/deep_learning_intro.pdf
 ---
 
-This write-up is the final result of my 2020 Summer research work done under the supervision of Professor Gokhan Yıldırım. We study the mathematical foundations of neural networks. Then we focus on CNNs and explore a method that is used to learn from graph data.
+This write-up is the final result of my 2020 summer research work done under the supervision of Professor Gokhan Yıldırım. We study the mathematical foundations of neural networks. Then we focus on CNNs and explore a method that is used to learn from graph data.
