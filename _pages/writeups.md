@@ -1,7 +1,7 @@
 ---
 layout: archive
-title: "Publications"
-permalink: /publications/
+title: "Write-ups"
+permalink: /writeups/
 author_profile: true
 ---
 
