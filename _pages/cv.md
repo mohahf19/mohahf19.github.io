@@ -11,30 +11,23 @@ redirect_from:
 
 Education
 ======
-* B.S. in GitHub, GitHub University, 2012
-* M.S. in Jekyll, GitHub University, 2014
-* Ph.D in Version Control Theory, GitHub University, 2018 (expected)
+* B.S. in Computer Engineering from Bilkent University, 2021 (expected)
+* B.S. in Mathematics from Bilkent University, 2021 (expected) 
 
 Work experience
 ======
-* Summer 2015: Research Assistant
-  * Github University
-  * Duties included: Tagging issues
-  * Supervisor: Professor Git
 
-* Fall 2015: Research Assistant
-  * Github University
-  * Duties included: Merging pull requests
-  * Supervisor: Professor Hub
+* Summer 2019: iOS Developer
+  * FDNSoft
+  * Duties included: worked on creating an application that applies filters to images
   
 Skills
 ======
-* Skill 1
-* Skill 2
-  * Sub-skill 2.1
-  * Sub-skill 2.2
-  * Sub-skill 2.3
-* Skill 3
+* Software:
+  * C++, Swift, Java, Python, Latex, Github, UML, Matlab, PHP
+* Databases:
+  * MySQL, Firebase
+
 
 Publications
 ======
