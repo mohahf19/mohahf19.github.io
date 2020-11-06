@@ -11,8 +11,8 @@ redirect_from:
 
 Education
 ======
-* B.S. in Computer Engineering from Bilkent University, 2021 (expected)
-* B.S. in Mathematics from Bilkent University, 2021 (expected) 
+* B.S. in Computer Engineering, Bilkent University, 2021 (expected)
+* B.S. in Mathematics, Bilkent University, 2021 (expected) 
 
 Work experience
 ======
