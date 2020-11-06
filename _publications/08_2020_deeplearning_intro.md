@@ -1,6 +1,5 @@
 ---
 title: "Deep Learning Introduction And Applications"
-collection: teaching
 venue: MATH291, Bilkent University
 date: 2020-08-25
 course: MATH291

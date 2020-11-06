@@ -12,4 +12,4 @@ Hello, and welcome to my personal website. I am a senior student at Bilkent univ
 
 Hobbies
 =====
-In my free time, I enjoy going on aimless photography walks. If you are interested in seeing some of my work, feel free to check out my [Instagram](https://www.instagram.com/mohahf19/) account. I also love playing table tennis! It can get really competitive, however. Other than that, I love playing chess (disclaimer: I am not so good). 
+In my free time, I enjoy going on photography walks. If you are interested in seeing some of my work, feel free to check out my [Instagram](https://www.instagram.com/mohahf19/) account. I also love playing table tennis! It can get really competitive, however. Other than that, I love playing chess (disclaimer: I am not so good). 
