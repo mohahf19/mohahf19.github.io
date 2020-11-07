@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-Hello, and welcome to my personal website. I am a senior student at Bilkent university who has been blessed with a passion for both Computer Science and Mathematics. So, I double majored in both! Other than that, I enjoy working on computational biology projects in ÇiçekLab. I am interested in pursuing a career in research and academia in the future. My research interests are machine learning and computational biology. 
+Hello, and welcome to my personal website. I am a senior student at Bilkent university who has been blessed with a passion for both Computer Science and Mathematics. So, I am double majoring in both! Other than that, I enjoy working on computational biology projects in ÇiçekLab. I am interested in pursuing a career in research and academia in the future. My research interests are machine learning and computational biology. 
 
 Hobbies
 =====
