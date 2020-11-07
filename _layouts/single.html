@@ -41,7 +41,7 @@ layout: default
         {% elsif page.venue and page.date %}
           <p>Published in <i>{{ page.venue }}</i>, {{ page.date | default: "1900-01-01" | date: "%Y" }} </p>
         {% elsif page.date %}
-        <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Written: </strong>{{ post.date | date: '%B, %Y' }} </p>
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Date: </strong>{{ post.date | date: '%B, %Y' }} </p>
         {% endif %}
         
              
