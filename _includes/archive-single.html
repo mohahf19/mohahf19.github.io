@@ -45,7 +45,7 @@
         {% elsif post.collection == 'publications' %}
           <p>Published in <i>{{ post.venue }}</i>, {{ post.date | default: "1900-01-01" | date: "%Y" }} </p>
         {% elsif post.date %}
-        <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Written: </strong>{{ post.date | date: '%B, %Y' }} </p>
+        <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Published: </strong>{{ post.date | date: '%B, %Y' }} </p>
         {% endif %}
 
     {% if post.excerpt and site.read_more != 'enabled' %}
