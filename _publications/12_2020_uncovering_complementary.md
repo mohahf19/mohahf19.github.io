@@ -2,6 +2,7 @@
 title: "[pre-print]Uncovering complementary sets of variants for the prediction of quantitative phenotypes"
 date: 2020-12-12
 venue: 'biorXiv'
+authors: 'Serhan Yilmaz, <u>Mohamad Fakhouri</u>, Mehmet Koyuturk, A. Ercument Cicek, Oznur Tastan'
 share: false
 permalink: /writeups/uncovering_complementary
 paperurl: https://www.biorxiv.org/content/10.1101/2020.12.11.419952v1
