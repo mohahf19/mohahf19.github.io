@@ -16,6 +16,10 @@ Adding a stop means adding an entry to `stops` in `story.js`, a city to `WHERE` 
 - `/#at=4` starts at a stop (0 is the camp).
 - `/#lens` opens the telescope.
 
+## Releases
+
+Every push to `main` runs `.github/workflows/release.yml`: it picks the next version, creates a GitHub Release with notes from the commits, stamps the version into the page (it shows at the bottom of the journal), and deploys to GitHub Pages. Versions bump the patch number by default; write `#minor` or `#major` in a commit message to bump those instead.
+
 ## Preview locally
 
 ```sh

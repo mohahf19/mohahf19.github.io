@@ -1,0 +1,60 @@
+# Every push to main becomes a numbered release and a deploy.
+# The version bumps the patch number by default; put #minor or #major in the commit message to bump those instead.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # create the tag and release
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the next version
+        id: version
+        run: |
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$last" ]; then
+            next=v1.0.0
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            msg=$(git log --format=%B "$last..HEAD")
+            if grep -qi '#major' <<< "$msg"; then major=$((major + 1)); minor=0; patch=0
+            elif grep -qi '#minor' <<< "$msg"; then minor=$((minor + 1)); patch=0
+            else patch=$((patch + 1)); fi
+            next="v$major.$minor.$patch"
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "built=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Tag it and write the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.version.outputs.version }}" --target "$GITHUB_SHA" --title "${{ steps.version.outputs.version }}" --generate-notes
+
+      - name: Stamp the version into the site
+        run: |
+          mkdir _site
+          cp -r index.html 404.html assets _site/
+          sed -i "s/__VERSION__/${{ steps.version.outputs.version }}/g; s/__BUILT__/${{ steps.version.outputs.built }}/g" _site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+      - id: deploy
+        uses: actions/deploy-pages@v4

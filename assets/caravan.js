@@ -601,7 +601,15 @@ const jEl = document.getElementById('journal'), pg = document.getElementById('pg
 pg.innerHTML = `<button class="x" type="button" id="jx">close ✕</button><h2>THE JOURNAL</h2><p class="sub">Mohamad Fakhouri, machine learning engineer. <a href="mailto:mohahf19@gmail.com">mohahf19@gmail.com</a> · <a href="https://github.com/mohahf19" target="_blank" rel="noopener">GitHub</a></p>` +
   STOPS.slice(1).reverse().map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text.replace(/ <a href="#" data-lens>[^<]*<\/a>\./, '')}</p></div></div>`).join('') +
   `<h3>WRITING &amp; TALKS</h3>` +
-  (window.STORY.writing || []).map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text}</p></div></div>`).join('');
+  (window.STORY.writing || []).map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text}</p></div></div>`).join('') +
+  versionLine();
+// the release this page came from, stamped in by the deploy workflow (nothing when previewing locally)
+function versionLine() {
+  const m = document.querySelector('meta[name="site-version"]'), v = m && m.content, built = m && m.dataset.built;
+  if (!v || v.startsWith('__')) return '';
+  const when = new Date(built + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return `<p class="ver"><a href="https://github.com/mohahf19/mohahf19.github.io/releases/tag/${v}" target="_blank" rel="noopener">${v}</a> · ${when}</p>`;
+}
 function journal(on) { jEl.classList.toggle('on', on); if (on) track('journal', 'opened the journal'); }
 document.getElementById('jx').onclick = () => journal(false);
 jEl.addEventListener('click', e => { if (e.target === jEl) journal(false); });
