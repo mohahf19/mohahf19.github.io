@@ -568,7 +568,7 @@ function drawMap(t) {
   const [tx, ty] = mapPos(wx / GAP);
   if ((t * 3 | 0) % 4) { for (let j = -2; j <= 1; j++) for (let i = -2; i <= 2; i++) MP(tx + i, ty + j, ink); for (let i = -1; i <= 1; i++) { MP(tx + i, ty - 1, gold); MP(tx + i, ty, gold); } MP(tx + 1, ty - 2, gold); }
   mx.putImageData(mimg, 0, 0);
-  if (bmEl.classList.contains('on')) { bmx.imageSmoothingEnabled = false; bmx.drawImage(mc, 0, 0); }
+  if (bmEl.classList.contains('on')) drawBigMap(t);
 }
 // ride to stop i within this lap, the short way (the camp is whichever end of the lap is nearer)
 function rideTo(i) {
@@ -585,13 +585,35 @@ STOPS.forEach((s, i) => {
   yrs.appendChild(b);
 });
 
-// ---------- the big map: the same pixels, larger, with every stop listed at its city ----------
+// ---------- the big map: twice the detail, small pins, and one card per city out in open space ----------
 const bmEl = document.getElementById('bigmap'), bmc = document.getElementById('bmc'), bmx = bmc.getContext('2d'), bmw = document.getElementById('bmw');
-// where each city's list of stops sits relative to its pin
-const BM_LABEL = { lausanne: 'translate(calc(-100% - 10px),-50%)', zurich: 'translate(10px,-110%)', barcelona: 'translate(-30%,14px)', ankara: 'translate(12px,-30%)' };
+const BW2 = 240, BH2 = 160, LAND2 = Uint8Array.from(atob('AAAQPAAAAAAAAAB//+AIAAD/////////////////AAAA/IAAAAAAAAh//+AwAED/////////////////AAAN//wAAAAAADA//+BgA+D/////////////////AABE//wAAAAAAHI//+BgB/D/////////////////AAAC//gAAAAAB/Af/+hAB/H/////////////////AAAB//gAAAAADPAP/+AAB///////////////////AAAD//AAAAAAC/AH/9AAD///////////////////AAACf+AAAAAAC/wH/+AAD///////////////////AAAE/+AAAAAAH/wH/4AAD///////////////////AAAAv4AAAAAAD/Af8AAAD///////////////////AAACn/gAAAAAD+C34AAAD///////////////////AAAEn/wAAAAAD8PzwAAAD///////////////////AAAAX/4AAAAAD7nj4AAAB///////////////////AAAAH/4AAAAAB73wAAAAF///////////////////AAPcP/8AAAAAB5hADAAAB///////////////////AAP+Pn8AAAAAA6dAAAAA////////////////////AA/+AP8AAAAAA8GAAAfA////////////////////AAP/AP/gAAAAAcIDAB/h////////////////////AEf/CP/wAAAAB/wcAD//////////////////////AP/+ED/4AAAAA/x/g///////////////////////AP/4AD/wAAAAAf//////////////////////////AP/8AD/oAAAAB3//7///////////////////////Af/8AD/4AAAI////////////////////////////AH/8Df/8AAA+////////////////////////////AD/8B//8AAB/////////////////////////////AD/8C//5wAH/////////////////////////////AG/8A///4AP/////////////////////////////AH/8A///8AP/////////////////////////////AP/4B///4AP/////////////////////////////AP+AH///4Af/////////////////////////////A/4Af///wA//////////////////////////////APgAJ///AB//////////////////////////////AIAAAZ/+ADf/////////////////////////////AAAAAD//wH//////////////////////////////AAAAB///wf//////////////////////////////AAAAD///H///////////////////////////////AAAAH5mAH///////////////////////////////AAAAPwAAH///////////////////////////////AAAAYgAAH///////////////////////////////AAAAwAAAP///////////////////////////////AAAAAAAA////////////////////////////////AAAAAAAD////////////////////////////////AAAAABMD////////////////////////////////AAAAAAH/////////////////////////////////AAAAAAH/////////////////////////////////AAAAAAH/////////////////////////////////AAAAAcH/////////////////////////////////AAAAH///////////////////////////////////AAAAB///////////////////////////////////AAAAD///////////////////////////////////AAAAB///////////////////////////////////AAAAAH//////////////////////////////////AAAAAA//////////////////////////////////AAAAAAv/////////////////////////////////AAAAAAf////////////////////////w////////AAAAAAf///////////////////////8D///////gAAAAAAP///////////////////////gH//////+AAAAAAAP///////////////////8P/+Af//////wAAAAAAAB///////////////////8P/8AP//////wAAAAAAAB///////////////////4APwAH//////AAAAAAAAD///////////////////wAHwAf//////AAAAAAAAB////////8//////////AAfwA//////4AAAAAAAAA////////g//////////AA/4A//////gAAAAAAAAB////////g7/////////AAf/1//////gADAAAAAABf///////g1/////////AAH93//////AAHAAAAAAD////////wR////////7AAH4B//////AAPAAAAAAB////////gB////////4AAHAA/////+AAHAAAAAAD////////gA////////4AAGAAP////8AB/AAAAAAD/////+P/gAf///////wAAAAAD/////AA/AAAAAAD/////8H/wA////////wAAAAAB/////AAPAAAAAAD/////4B/8Af///////wAAAAAA/////gAPAAGAAAD/////AA/+AH///////wAAAAAAf////gAHAAP/wQH//+f+AA//AB///////wAAAAAAP////gAHAA///////8B8AA//gBf//////AAAAAAAD////gAHAD///////4AAAA//gAP//////AAAAAAAB////gABAB///////wAAAIf/gAP//////AAAAAAAAf///wABAB///////4AAAQP/wAB/////+AAAAAAAAP///wAAAA///////4AAA4H/wAA/////8AAAAAAAAH///4AAAA///////4AAB4B/4AAf////+AAAAAAAAH///4AAAA///////4AAA4B/8AAH/////AAAAAAAAH///8AAAA///////4AAAwA//8AH/////AAAf4AAAD///+AAAA///////wAAAwAf/4AD/////AAD/9AAAH////AAAA///////AAAAQAP/4AD/////gAH//gAAH////gAAA//////+AAAAAAD/8AD/////4Af//oAAf////gAAAf/////wAAAAYAAf/gD//////8////AB/////gAAA//////AAAAA4AAP/wD//9P8D////////////wAAA//////AAAAD4AAH/8D//xB4B////////////4AAA/////+AAAAD8AAB/+D/9wABH////////////+AAA/////8AAAAB4AAB/HD/80Bf/////////////9AAA/////8AAAAB4AAA+DB/8oB//////////////4AAB/////4AIgAB4AAAOBA/8AR//////////////wAAB/////wA8AAB4AAAOAB/+AB//////////////wAAB/////wAYAAB4AAAHgBf/ABP/////////////wAAD/////wAAAAB4AAAHgAf/ABf/////////////wAAD/////wIAAADgAAAHgAP+ABv/////////////wAAD/////4AAAAAAAAADAAH9gAP/////////////AAAB/////8IAAAAAAAAGAAL/QAf/////////////AAAC/////wAAAAAAAAAGAAD/sCv/////////////AAAA/////gAAAAAAAAAMAAQT8C//////////////AAAA/////gAAAAAAALDsAAB86AP/////////////AAAA/////AAAAAAAAP/gAAL+IgH/////////////gAAA/////AAAAAAAAP/AAAB/AAX/////////////gAAA////8AAAAAAAAD/AAAA9gAH/////////////wAAA////4AAAAAAEAA/AAAA+AAD/////////////+AAB8P//wAAAAAAeAAPAAAA+AYH//////////////AAAAD//wAAAAP3/YAHAAAAuACA//////////////gAAAH8AAAAf8///wABAAAAECACn8f/Of////////8AAADwAAAf/////wAAAAAABAAAD8H+A//////////AAADgAAB//////AAAAAAAAAABh4D8B//////////AAABgAAD//////AAAAAAAAAABAABgA//////////AAAAAAAH//////gAAAAAAAAAAAAAAA//////////AAABgAA///////wAAAAAAAAAAAAAAB//////////AAADwAB///////wAAAAAAAYAAAAABB//////////AAAD4EH///////4AAAAAAAf8AAAA8A//////////AAAD//v///////wAAAAAAAB+AAAB8A//////////AAAH//////////wAAAAAAAAAAAAD4A//////////AAAH//////////gAAAAAAAAAAAABgA//////////AAAH//////////AAAAAAAAAAAAAAAA//////////AAAP/////////+AAAAAAAAAAAAAAAB//////////AAAP/////////+AAAAAAAAAAAAAAAB//////////AAAf/////////+AAAAAAAAAAAAAAAD//////////AAB///////////AAAAAAAAAAAAAAAD//////////AAH///////////4AAAAAAAAAAAAAAH//////////AAf///////////4AAAAAAAAAAAAAAH//////////AA////////////+AAAAAAAAAAAAAAH//////////AA/////////////iAAAAAwAAAAAAAP//////////AB//////////////wAAAH+AAAAAAAP//////////AD//////////////8AAAP/AAAAAAAP//////////AD///////////////AAAf/AAAAAAAP//////////AD///////////////gAA//4AAAAAAf//////////AH///////////////gAA///gAAAAAf//////////AH///////////////gAA///gAAAAAf//////////AP///////////////wAA////gADoA///////////AP///////////////4AA////8APwB///////////AP////////////////wAf////A/6v///////////AP////////////////8A/////5//////////////AP/////////////////A////////////////////AH/////////////////h////////////////////AH/////////////////3//////////////////f/AH////////////////////////////////////B/AP///////////////////////////////////4B/AP/////////////////////////8/////////8A/Af/////////////////////////+/////////wAfA//////////////////////////+/v///////4AfA//////////////////////////+fv///////8APB///////////////////////////fv///////8APH///////////////////////////P////////8APH///////////////////////////vf///////+AHP///////////////////////////nf///////+AH////////////////////////////3P///////+AH////////////////////////////7H////////AD////////////////////////////4D////////AA////////////////////////////4D////////wA////////////////////////////8B////////wA////////////////////////////8B////////4A////////////////////////////8A////////8A////////////////////////////8Af///////+A////////////////////////////+Af///////+A////////////////////////////+AP///////+A/////////////////////////////AP///////+g'), c => c.charCodeAt(0));
+const isLand2 = (x, y) => x >= 0 && y >= 0 && x < BW2 && y < BH2 && (LAND2[(y * BW2 + x) >> 3] & (128 >> ((y * BW2 + x) & 7)));
+const bmImg = bmx.createImageData(BW2, BH2), bmBuf = new Uint32Array(bmImg.data.buffer), bmBase = new Uint32Array(BW2 * BH2);
+for (let y = 0; y < BH2; y++) for (let x = 0; x < BW2; x++) {
+  const l = isLand2(x, y), coast = l && (!isLand2(x + 1, y) || !isLand2(x - 1, y) || !isLand2(x, y + 1) || !isLand2(x, y - 1));
+  bmBase[y * BW2 + x] = pk(l ? (coast ? [154, 107, 64] : ((x * 7 + y * 13) % 17 === 0 ? [226, 200, 146] : [239, 217, 168])) : (BAYER[(x & 3) + ((y & 3) << 2)] < 3 ? [70, 108, 140] : [79, 120, 153]));
+}
+function drawBigMap(t) {
+  const B = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < BW2 && y < BH2) bmBuf[y * BW2 + x] = c; };
+  const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
+  bmBuf.set(bmBase);
+  for (let k = 0; k < NCH; k++) for (let i = 0; i < 60; i += 3) { const [x, y] = mapPos(k + i / 60); B(x * 2, y * 2, ink); }
+  const here = shown !== null ? WHERE[chap(shown)] : null;
+  for (const [name, [x, y]] of Object.entries(CITY)) {
+    for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) B(x * 2 + i, y * 2 + j, ink);
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) B(x * 2 + i, y * 2 + j, name === here ? gold : cream);
+  }
+  const [tx, ty] = mapPos(wx / GAP);
+  if ((t * 3 | 0) % 4) { for (let j = -2; j <= 2; j++) for (let i = -3; i <= 3; i++) B(tx * 2 + i, ty * 2 + j, ink); for (let j = -1; j <= 1; j++) for (let i = -2; i <= 2; i++) B(tx * 2 + i, ty * 2 + j, gold); }
+  bmx.putImageData(bmImg, 0, 0);
+}
+// each city's card sits in open water or empty land, joined to its pin by a leader line
+const CARD_AT = { lausanne: [2, 6], zurich: [42, 4], barcelona: [3, 66], ankara: [63, 72] };
+const bmLines = document.getElementById('bmlines');
 for (const city of Object.keys(CITY)) {
-  const [x, y] = CITY[city], box = document.createElement('div');
-  box.className = 'bml'; box.style.left = (x / MW * 100) + '%'; box.style.top = (y / MH * 100) + '%'; box.dataset.t = box.style.transform = BM_LABEL[city];
+  const box = document.createElement('div');
+  box.className = 'bml'; box.dataset.city = city; box.style.left = CARD_AT[city][0] + '%'; box.style.top = CARD_AT[city][1] + '%';
   box.innerHTML = `<strong>${city === 'zurich' ? 'Zürich' : city[0].toUpperCase() + city.slice(1)}</strong>`;
   STOPS.forEach((s, i) => {
     if (WHERE[i] !== city) return;
@@ -602,17 +624,33 @@ for (const city of Object.keys(CITY)) {
   });
   bmw.appendChild(box);
 }
+function layoutCards() {
+  let r = bmw.getBoundingClientRect();
+  const narrow = r.width < 560;
+  bmw.classList.toggle('compact', narrow);
+  for (const b of bmw.querySelectorAll('.bml button')) b.textContent = narrow ? b.dataset.short : b.dataset.long;
+  r = bmw.getBoundingClientRect();
+  let svg = '';
+  for (const box of bmw.querySelectorAll('.bml')) {
+    // keep every card inside the map
+    box.style.left = CARD_AT[box.dataset.city][0] + '%'; box.style.top = CARD_AT[box.dataset.city][1] + '%';
+    let c = box.getBoundingClientRect();
+    if (c.bottom > r.bottom - 4) box.style.top = (c.top - r.top - (c.bottom - r.bottom + 6)) + 'px';
+    if (c.right > r.right - 4) box.style.left = (c.left - r.left - (c.right - r.right + 6)) + 'px';
+    c = box.getBoundingClientRect();
+    const [cx0, cy0] = CITY[box.dataset.city], px = cx0 / MW * r.width, py = cy0 / MH * r.height;
+    // from the nearest point on the card's edge to the pin
+    const ex = cl(px, c.left - r.left, c.right - r.left), ey = cl(py, c.top - r.top, c.bottom - r.top);
+    svg += `<line x1="${ex}" y1="${ey}" x2="${px}" y2="${py}"/>`;
+  }
+  bmLines.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`); bmLines.innerHTML = svg;
+}
+addEventListener('resize', () => { if (bmEl.classList.contains('on')) layoutCards(); });
 function bigMap(on) {
   bmEl.classList.toggle('on', on);
   if (!on) return;
   track('map', 'opened the big map');
-  // a list that would spill off the map's right edge goes on the left of its pin instead
-  const edge = bmw.getBoundingClientRect().right, narrow = bmw.clientWidth < 560;
-  for (const b of bmw.querySelectorAll('.bml button')) b.textContent = narrow ? b.dataset.short : b.dataset.long;
-  for (const box of bmw.querySelectorAll('.bml')) {
-    box.style.transform = box.dataset.t;
-    if (box.getBoundingClientRect().right > edge - 4) box.style.transform = 'translate(calc(-100% - 10px),-30%)';
-  }
+  drawBigMap(T0); layoutCards();
 }
 mc.addEventListener('click', e => { e.stopPropagation(); bigMap(true); });
 document.getElementById('bmx').onclick = () => bigMap(false);
