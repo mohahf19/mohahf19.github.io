@@ -21,12 +21,22 @@ const LANTERNS = !!HIJRI && (HIJRI.m === 9 || (HIJRI.m === 10 && HIJRI.d <= 3) |
 const jr = document.getElementById('jr'), cv = document.getElementById('cv'), cx = cv.getContext('2d');
 const VH = 180, GROUND = 140, HORIZON = 112, MIDB = 128;
 let VW = 320, SC = 4, img, buf, stampBuf, TSX = 100, frameId = 1;
+let cvTop = 0, bgKey = '';
 function resize() {
-  SC = Math.max(2, Math.floor(jr.clientHeight / VH));
-  VW = Math.ceil(jr.clientWidth / SC);
+  const w = jr.clientWidth, h = jr.clientHeight;
+  // whole-pixel zoom from the height, unless that leaves too little road across a narrow screen:
+  // then zoom out so a whole stop (camel, sign and props) fits the width
+  SC = Math.max(1, Math.floor(h / VH));
+  if (w / SC < 220) SC = Math.max(1, w / 196);
+  VW = Math.ceil(w / SC);
   cv.width = VW; cv.height = VH; cv.style.width = VW * SC + 'px'; cv.style.height = VH * SC + 'px';
+  // tall screens: the scene sits just above the dialog box, the sky carries on above it and the sand below
+  const free = h - VH * SC;
+  cvTop = free > 0 && h > w ? Math.max(0, free - 150) : 0;
+  cv.style.top = cvTop + 'px'; bgKey = '';
   img = cx.createImageData(VW, VH); buf = new Uint32Array(img.data.buffer); stampBuf = new Uint32Array(VW * VH);
-  TSX = Math.round(Math.min(130, Math.max(40, VW * .3)));
+  // narrow screens: the camel rides near the left edge so the stop's props fit beside it
+  TSX = VW < 260 ? 32 : Math.round(Math.min(130, VW * .3));
 }
 new ResizeObserver(resize).observe(jr); resize();
 
@@ -870,6 +880,8 @@ function draw(t) {
       drawSprite(((w * 9) | 0) % 2 ? SPR.stand1 : SPR.stand0, Math.round(x), GROUND + 1 - 16 - (((w * 9) | 0) % 2), wdir, true);
     } else drawSprite(SPR.sit, sitX, GROUND + 1 - 13, 1, true);
   }
+  const css = c => `rgb(${c & 255},${(c >> 8) & 255},${(c >> 16) & 255})`, key = css(sky.bands[0]) + css(T('#ecbf75')) + cvTop;
+  if (key !== bgKey) { bgKey = key; jr.style.background = `linear-gradient(${css(sky.bands[0])} 0 ${cvTop + 2}px, ${css(T('#ecbf75'))} ${cvTop + 2}px)`; }
   if (WINTER) { const u = mod(wx, LOOP) / GAP; snowfall(t, smooth(3.5, 4, u) * (1 - smooth(5.5, 6, u))); }
   if (say.until > T0) bubble(TSX + 12, GROUND + 1 - FOOT - 22 + Math.round(smooth(0, 1.2, Math.max(campT, rest)) * DROP), say.text);
   cx.putImageData(img, 0, 0);
