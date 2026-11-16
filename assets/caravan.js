@@ -568,31 +568,55 @@ function drawMap(t) {
   const [tx, ty] = mapPos(wx / GAP);
   if ((t * 3 | 0) % 4) { for (let j = -2; j <= 1; j++) for (let i = -2; i <= 2; i++) MP(tx + i, ty + j, ink); for (let i = -1; i <= 1; i++) { MP(tx + i, ty - 1, gold); MP(tx + i, ty, gold); } MP(tx + 1, ty - 2, gold); }
   mx.putImageData(mimg, 0, 0);
+  if (bmEl.classList.contains('on')) { bmx.imageSmoothingEnabled = false; bmx.drawImage(mc, 0, 0); }
 }
-// click a city: ride forward to the next stop that happened there
-// ride to the nearest stop (back or forward) that happened in the clicked city
-mc.addEventListener('click', e => {
-  e.stopPropagation();
-  const r = mc.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * MW, y = (e.clientY - r.top) / r.height * MH;
-  let best = null, bd = 64;
-  for (const [name, [cx0, cy0]] of Object.entries(CITY)) { const d = (cx0 - x) ** 2 + (cy0 - y) ** 2; if (d < bd) { bd = d; best = name; } }
-  if (!best) return;
-  const k0 = Math.round(wx / GAP); let pick = null;
-  for (let d = 1; d <= NCH && pick === null; d++) for (const k of [k0 - d, k0 + d]) if (k >= 0 && WHERE[chap(k)] === best) { pick = k; break; }
-  if (pick !== null) go(pick);
-});
-// one button per stop: ride there within this lap, the short way
+// ride to stop i within this lap, the short way (the camp is whichever end of the lap is nearer)
+function rideTo(i) {
+  const k0 = Math.round(wx / GAP), lap = Math.floor(k0 / NCH) * NCH;
+  let k = lap + i;
+  if (i === 0 && Math.abs(lap + NCH - k0) < Math.abs(lap - k0)) k = lap + NCH;
+  hurry = 1; go(k);
+}
+// one button per stop
 const yrs = document.getElementById('yrs');
 STOPS.forEach((s, i) => {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = s.sign || 'camp'; b.title = s.title;
-  b.onclick = () => {
-    const k0 = Math.round(wx / GAP), lap = Math.floor(k0 / NCH) * NCH;
-    let k = lap + i;
-    if (i === 0 && Math.abs(lap + NCH - k0) < Math.abs(lap - k0)) k = lap + NCH;
-    hurry = 1; go(k);
-  };
+  b.onclick = () => rideTo(i);
   yrs.appendChild(b);
 });
+
+// ---------- the big map: the same pixels, larger, with every stop listed at its city ----------
+const bmEl = document.getElementById('bigmap'), bmc = document.getElementById('bmc'), bmx = bmc.getContext('2d'), bmw = document.getElementById('bmw');
+// where each city's list of stops sits relative to its pin
+const BM_LABEL = { lausanne: 'translate(calc(-100% - 10px),-50%)', zurich: 'translate(10px,-110%)', barcelona: 'translate(-30%,14px)', ankara: 'translate(12px,-30%)' };
+for (const city of Object.keys(CITY)) {
+  const [x, y] = CITY[city], box = document.createElement('div');
+  box.className = 'bml'; box.style.left = (x / MW * 100) + '%'; box.style.top = (y / MH * 100) + '%'; box.dataset.t = box.style.transform = BM_LABEL[city];
+  box.innerHTML = `<strong>${city === 'zurich' ? 'Zürich' : city[0].toUpperCase() + city.slice(1)}</strong>`;
+  STOPS.forEach((s, i) => {
+    if (WHERE[i] !== city) return;
+    const b = document.createElement('button'); b.type = 'button';
+    b.dataset.long = s.sign ? `${s.sign} ${s.title}` : 'camp'; b.dataset.short = s.sign || 'camp'; b.title = s.title;
+    b.onclick = () => { rideTo(i); bigMap(false); };
+    box.appendChild(b);
+  });
+  bmw.appendChild(box);
+}
+function bigMap(on) {
+  bmEl.classList.toggle('on', on);
+  if (!on) return;
+  track('map', 'opened the big map');
+  // a list that would spill off the map's right edge goes on the left of its pin instead
+  const edge = bmw.getBoundingClientRect().right, narrow = bmw.clientWidth < 560;
+  for (const b of bmw.querySelectorAll('.bml button')) b.textContent = narrow ? b.dataset.short : b.dataset.long;
+  for (const box of bmw.querySelectorAll('.bml')) {
+    box.style.transform = box.dataset.t;
+    if (box.getBoundingClientRect().right > edge - 4) box.style.transform = 'translate(calc(-100% - 10px),-30%)';
+  }
+}
+mc.addEventListener('click', e => { e.stopPropagation(); bigMap(true); });
+document.getElementById('bmx').onclick = () => bigMap(false);
+bmEl.addEventListener('click', e => { if (e.target === bmEl) bigMap(false); });
 const yrBtns = [...yrs.children];
 const nearest = () => Math.round(wx / GAP);
 function go(k) { target = Math.max(0, k) * GAP; }
@@ -626,14 +650,14 @@ skipBtn.onclick = () => skipToCamp(false);
 document.getElementById('b-jr').onclick = () => journal(true);
 for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventListener(ev, () => { lastInput = T0; }, { passive: true });
 jr.addEventListener('wheel', e => {
-  if (jEl.classList.contains('on') || lEl.classList.contains('on')) return;
+  if (jEl.classList.contains('on') || lEl.classList.contains('on') || bmEl.classList.contains('on')) return;
   e.preventDefault();
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
   target = Math.max(0, target + d * .55); lastWheel = T0; hurry = 1;
 }, { passive: false });
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') { journal(false); lens(false); }
-  if (jEl.classList.contains('on') || lEl.classList.contains('on')) return;
+  if (e.key === 'Escape') { journal(false); lens(false); bigMap(false); }
+  if (jEl.classList.contains('on') || lEl.classList.contains('on') || bmEl.classList.contains('on')) return;
   if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
   if (e.key === 'ArrowLeft') { e.preventDefault(); prevStop(); }
   if (e.key === 'End') skipToCamp(false);
