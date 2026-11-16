@@ -281,23 +281,64 @@ function farH(fx) {
 }
 
 // ---------- props, one set per stop ----------
-// the chalkboard writes itself: Σ, { }, a dotted underline and a dot, then the eraser wipes it and it starts over.
-// strokes are in board pixels; CHALK is the timetable the drawing and the sound both read
-const CHALK = (() => {
-  const strokes = [
-    [[7, 3], [3, 3], [5, 5], [3, 7], [7, 7]],
-    [[13, 3], [12, 3], [12, 4], [11, 5], [12, 6], [12, 7], [13, 7]],
-    [[17, 3], [18, 3], [18, 4], [19, 5], [18, 6], [18, 7], [17, 7]],
-    [[3, 10], [19, 10]],
-  ];
-  const SPEED = 9, plan = []; let t = .6;
-  for (const pts of strokes) {
-    let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-    plan.push({ pts, len, t0: t, t1: t + len / SPEED, dotted: pts.length === 2 }); t += len / SPEED + .45;
+// the chalkboard writes formulas in chalk, one stroke at a time, underlines them, wipes them, and moves on to the next.
+// letters are handwritten strokes in a 3x5 cell (x right, y down); superscripts are small strokes raised above the line
+const GLYPH_STROKES = {
+  x: [[[0, 0], [2, 4]], [[2, 0], [0, 4]]],
+  '←': [[[3, 2], [0, 2]], [[1, 1], [0, 2], [1, 3]]],
+  '−': [[[0, 2], [2, 2]]],
+  'η': [[[0, 1], [0, 4]], [[0, 2], [1, 1], [2, 2], [2, 5]]],
+  '∇': [[[0, 0], [3, 0], [2, 4], [1, 4], [0, 0]]],
+  f: [[[2, 0], [1, 0], [1, 4]], [[0, 2], [2, 2]]],
+  '(': [[[1, 0], [0, 1], [0, 3], [1, 4]]],
+  ')': [[[0, 0], [1, 1], [1, 3], [0, 4]]],
+  e: [[[0, 2], [2, 2], [2, 1], [1, 0], [0, 1], [0, 3], [1, 4], [2, 4]]],
+  '+': [[[1, 1], [1, 3]], [[0, 2], [2, 2]]],
+  1: [[[0, 1], [1, 0], [1, 4]], [[0, 4], [2, 4]]],
+  '=': [[[0, 1], [2, 1]], [[0, 3], [2, 3]]],
+  0: [[[1, 0], [2, 1], [2, 3], [1, 4], [0, 3], [0, 1], [1, 0]]],
+  a: [[[2, 1], [2, 4]], [[2, 2], [1, 1], [0, 2], [0, 3], [1, 4], [2, 3]]],
+  b: [[[0, 0], [0, 4]], [[0, 2], [1, 1], [2, 2], [2, 3], [1, 4], [0, 4]]],
+  c: [[[2, 1], [1, 1], [0, 2], [0, 3], [1, 4], [2, 4]]],
+  P: [[[0, 4], [0, 0], [2, 0], [2, 2], [0, 2]]],
+  N: [[[0, 4], [0, 0], [3, 4], [3, 0]]],
+  '?': [[[0, 1], [1, 0], [2, 1], [1, 2], [1, 3]], [[1, 4.6], [1, 4.6]]],
+  '^i': [[[0, 0], [0, 0]], [[0, 2], [0, 3]]],
+  '^π': [[[0, 1], [3, 1]], [[1, 1], [1, 3]], [[2, 1], [2, 3]]],
+  '^2': [[[0, 0], [1, 0], [1, 1], [0, 2], [1, 2]]],
+};
+const WIDTH = { '←': 5, '(': 3, ')': 3, '^i': 2, '^π': 5, '^2': 3, '∇': 5, N: 5 };
+// maths, then CS, then where it led
+const FORMULAS = [
+  ['e', '^i', '^π', ' ', '+', ' ', '1', ' ', '=', ' ', '0'],   // Euler's identity
+  ['P', ' ', '=', ' ', 'N', 'P', '?'],                         // the great open question
+  ['x', '←', 'x', '−', 'η', '∇', 'f', '(', 'x', ')'],          // gradient descent
+];
+const BOARD_W = 43, BOARD_H = 15, LINE = 4, SPEED = 13;
+// turn each formula into a timetable of strokes, centred on the board, with an underline and a wipe at the end
+const CHALK = FORMULAS.map(tokens => {
+  const strokes = []; let cx = 0;
+  for (const tk of tokens) {
+    if (tk === ' ') { cx += 2; continue; }
+    const sup = tk[0] === '^', dy = sup ? LINE - 3 : LINE;
+    for (const st of GLYPH_STROKES[tk]) strokes.push(st.map(([x, y]) => [cx + x, dy + y]));
+    cx += WIDTH[tk] || 4;
   }
-  const tap = t, wipe0 = t + 2.6, wipe1 = wipe0 + 1.1;
-  return { plan, SPEED, tap, wipe0, wipe1, cycle: wipe1 + .7 };
-})();
+  const off = Math.floor((BOARD_W - cx) / 2) + 1;
+  for (const st of strokes) for (const pt of st) pt[0] += off;
+  strokes.push([[off - 1, LINE + 7], [off + cx - 1, LINE + 7]]);
+  const plan = []; let t = .6;
+  strokes.forEach((pts, i) => {
+    let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    len = Math.max(len, .6);
+    plan.push({ pts, len, t0: t, t1: t + len / SPEED, dotted: i === strokes.length - 1 }); t += len / SPEED + .18;
+  });
+  const wipe0 = t + 2.4, wipe1 = wipe0 + 1.2;
+  return { plan, wipe0, wipe1, cycle: wipe1 + .7 };
+});
+const CHALK_LOOP = CHALK.reduce((a, f) => a + f.cycle, 0);
+// which formula is on the board at time t, and how far into it
+function chalkNow(t) { let u = mod(t, CHALK_LOOP), i = 0; while (u >= CHALK[i].cycle) { u -= CHALK[i].cycle; i++; } return { f: CHALK[i], u, i }; }
 function strokeAt(pts, d) {
   for (let i = 1; i < pts.length; i++) {
     const [ax, ay] = pts[i - 1], [bx, by] = pts[i], l = Math.hypot(bx - ax, by - ay);
@@ -306,27 +347,26 @@ function strokeAt(pts, d) {
   return pts[pts.length - 1];
 }
 function chalkboard(x, base, t) {
-  line(x + 3, base, x + 6, base - 18, T('#6b3f1f')); line(x + 21, base, x + 18, base - 18, T('#6b3f1f'));
-  R(x, base - 27, 25, 16, T('#7a4a28')); R(x + 1, base - 26, 23, 14, T('#2f3d32')); R(x, base - 12, 25, 1, T('#8a5a32'));   // frame and chalk tray
-  const bx = x + 1, by = base - 26, chalk = T('#e6e6d6'), u = mod(t, CHALK.cycle);
-  const wiped = u >= CHALK.wipe0 ? Math.min(24, (u - CHALK.wipe0) / (CHALK.wipe1 - CHALK.wipe0) * 24) : -1;
-  const dot = (px, py) => { px = Math.round(px); py = Math.round(py); if (px > wiped && u < CHALK.wipe1) P(bx + px, by + py, chalk); };
+  const W = BOARD_W, H = BOARD_H, top = base - H - 13;
+  line(x + 4, base, x + 8, top + H, T('#6b3f1f')); line(x + W - 2, base, x + W - 6, top + H, T('#6b3f1f'));
+  R(x, top - 1, W + 2, H + 2, T('#7a4a28')); R(x + 1, top, W, H, T('#2f3d32')); R(x, top + H + 1, W + 2, 1, T('#8a5a32'));   // frame, board, chalk tray
+  const bx = x + 1, by = top, chalk = T('#e6e6d6'), { f, u } = chalkNow(t);
+  const wiped = u >= f.wipe0 ? Math.min(W, (u - f.wipe0) / (f.wipe1 - f.wipe0) * W) : -1;
+  const dot = (px, py) => { px = Math.round(px); py = Math.round(py); if (px > wiped && u < f.wipe1 && px >= 0 && px < W && py >= 0 && py < H) P(bx + px, by + py, chalk); };
   let pen = null;
-  for (const st of CHALK.plan) {
+  for (const st of f.plan) {
     if (u < st.t0) break;
-    const d = Math.min(st.len, (u - st.t0) * CHALK.SPEED);
+    const d = Math.min(st.len, (u - st.t0) * SPEED);
     for (let k = 0; k <= d * 2; k++) { const [px, py] = strokeAt(st.pts, k / 2); if (!st.dotted || Math.round(px) % 2 === 1) dot(px, py); }
     if (u < st.t1) pen = strokeAt(st.pts, d);
   }
-  if (u >= CHALK.tap) dot(21, 5);
-  if (u >= CHALK.tap - .25 && u < CHALK.tap + .15) pen = [21, 5];
-  if (pen) {
+  if (pen && u < f.wipe0) {
     // the chalk itself, held at an angle against the board
     const [px, py] = pen.map(Math.round);
     P(bx + px + 1, by + py - 1, chalk); P(bx + px + 2, by + py - 2, chalk); P(bx + px + 3, by + py - 3, T('#b8b8a8'));
-  } else if (wiped < 0 || u >= CHALK.wipe1) R(x + 16, base - 13, 3, 1, chalk);       // resting on the tray
-  if (wiped >= 0 && u < CHALK.wipe1) {
-    const ex = bx + Math.round(wiped) - 2, ey = by + 3 + Math.round(Math.abs(Math.sin(u * 9)) * 6);
+  } else if (wiped < 0 || u >= f.wipe1) R(x + W - 10, top + H, 3, 1, chalk);       // resting on the tray
+  if (wiped >= 0 && u < f.wipe1) {
+    const ex = bx + Math.round(wiped) - 2, ey = by + 2 + Math.round(Math.abs(Math.sin(u * 9)) * (H - 6));
     R(ex, ey, 4, 3, T('#5a5a64')); R(ex, ey, 4, 1, T('#8a5a32'));
   }
 }
@@ -603,7 +643,7 @@ pg.innerHTML = `<button class="x" type="button" id="jx">close ✕</button><h2>TH
   `<h3>WRITING &amp; TALKS</h3>` +
   (window.STORY.writing || []).map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text}</p></div></div>`).join('') +
   versionLine();
-// the release this page came from, stamped in by the deploy workflow (nothing when previewing locally)
+// the release this page came from, stamped in by the deploy workflow (shows "dev" when previewing locally)
 function versionLine() {
   const m = document.querySelector('meta[name="site-version"]'), v = m && m.content, built = m && m.dataset.built;
   if (!v || v.startsWith('__')) return '';
@@ -803,7 +843,7 @@ function draw(t) {
     if (STOPS[c].sign) sign(sx + 36, GROUND + 2, STOPS[c].sign);
     if (c === 0 && LANTERNS) lanterns(sx - 34, sx + 84, G1 - 26, t);
     if (c === 0) { palm(sx - 40, G1, 20); rug(sx + 19, G1, 20); fire(sx + 46, G1, t); dallah(sx + 56, G1); steam(sx + 59, G1 - 13, t); tent(sx + 78, G1, 28, 13); }
-    if (c === 1) { bilkentBanner(sx + 52, G1); chalkboard(sx + 96, G1, t); books(sx + 128, G1); }
+    if (c === 1) { bilkentBanner(sx + 52, G1); chalkboard(sx + 94, G1, t); books(sx + 144, G1); }
     if (c === 2) { helix(sx + 64, G1, t); scroll(sx + 80, G1); }
     if (c === 3) photoBoard(sx + 52, G1);
     if (c === 4) { epflBanner(sx + 50, G1); lectern(sx + 84, G1, t); }
@@ -925,12 +965,12 @@ function soundTick(dt) {
   if (roll(.8 * w[0])) noiseHit(now, .06, 900, 'bandpass', .3 * w[0]);
   if (roll(1.6 * (w[0] * night + w[6]))) cricket(now, w[0] + w[6]);
   // Bilkent: the sound follows the chalk you can see: a scratch per stroke, a tap for the dot, the eraser's swish
-  const cu = mod(T0, CHALK.cycle), cp = SND.chalkU === undefined ? cu : SND.chalkU; SND.chalkU = cu;
-  const crossed = at => (cp < at && cu >= at) || (cp > cu && (at > cp || at <= cu));
+  const { f: cf, u: cu, i: ci } = chalkNow(T0), cp = SND.chalkI === ci && SND.chalkU !== undefined ? SND.chalkU : -1;
+  SND.chalkU = cu; SND.chalkI = ci;
+  const crossed = at => cp < at && cu >= at;
   if (w[1] > 0) {
-    for (const st of CHALK.plan) if (crossed(st.t0)) chalkStroke(now, st.t1 - st.t0, w[1]);
-    if (crossed(CHALK.tap)) noiseHit(now, .02, 1800, 'bandpass', .3 * w[1]);
-    if (crossed(CHALK.wipe0)) { const sw = CHALK.wipe1 - CHALK.wipe0; for (let i = 0; i < 4; i++) noiseHit(now + i * sw / 4, sw / 4 + .05, 900, 'lowpass', .1 * w[1]); }
+    for (const st of cf.plan) if (crossed(st.t0)) chalkStroke(now, st.t1 - st.t0, w[1]);
+    if (crossed(cf.wipe0)) { const sw = cf.wipe1 - cf.wipe0; for (let i = 0; i < 4; i++) noiseHit(now + i * sw / 4, sw / 4 + .05, 900, 'lowpass', .1 * w[1]); }
   }
   // Çiçek Lab: equipment beeps
   if (roll(.35 * w[2])) { tone(now, 'sine', 1320, 1320, .07, .05 * w[2], 5000); if (Math.random() < .4) tone(now + .12, 'sine', 1320, 1320, .07, .05 * w[2], 5000); }
