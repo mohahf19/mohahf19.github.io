@@ -19,6 +19,8 @@ html,body{margin:0;height:100%;background:#1a1420;overflow:hidden}
 .px{height:14px;width:auto;fill:currentColor;shape-rendering:crispEdges;vertical-align:-2px}
 .box .more .px{height:8px}
 #b-snd .on{display:none}#b-snd[aria-pressed="true"] .on{display:inline}#b-snd[aria-pressed="true"] .off{display:none}
+.ctl button:disabled,.yrs button:disabled{opacity:.4;cursor:default;box-shadow:none}
+.ctl button:disabled:active{transform:none}
 .ctl button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(30,18,24,.45)}
 .box{position:absolute;left:50%;bottom:22px;transform:translate(-50%,8px);width:min(640px,calc(100% - 32px));box-sizing:border-box;
   background:var(--paper);color:var(--ink);border:4px solid var(--ink);box-shadow:6px 6px 0 rgba(30,18,24,.45);padding:12px 18px 14px;

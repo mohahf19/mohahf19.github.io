@@ -611,7 +611,8 @@ cv.addEventListener('click', e => {
 });
 document.getElementById('b-next').onclick = next;
 document.getElementById('b-prev').onclick = prevStop;
-document.getElementById('b-skip').onclick = () => skipToCamp(false);
+const skipBtn = document.getElementById('b-skip');
+skipBtn.onclick = () => skipToCamp(false);
 document.getElementById('b-jr').onclick = () => journal(true);
 for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventListener(ev, () => { lastInput = T0; }, { passive: true });
 jr.addEventListener('wheel', e => {
@@ -1043,6 +1044,9 @@ function frame(now) {
   soundTick(dt);
   drawMap(T0);
   yrBtns.forEach((b, i) => b.classList.toggle('here', shown !== null && chap(shown) === i));
+  // going back to camp only makes sense away from it
+  const atFire = chap(kN) === 0 && Math.abs(wx - kN * GAP) < 6 && Math.abs(target - kN * GAP) < 6;
+  if (skipBtn.disabled !== atFire) { skipBtn.disabled = atFire; yrBtns[0].disabled = atFire; }
   draw(T0);
   requestAnimationFrame(frame);
 }
