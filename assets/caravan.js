@@ -342,11 +342,9 @@ function lectern(x, base, t) {
   word('6/6', x, base - 25, T('#e8c050'));
   if ((t * 2 | 0) % 2) P(x + 13, base - 26, T('#fff4c0'));
 }
-function lake(x, base, w, t) {
-  for (let i = 0; i < w; i++) for (let j = 0; j < 3; j++) P(x + i, base - 2 + j, T(j === 0 ? '#8ab8d8' : '#5f95c0'));
-  for (let k = 0; k < 5; k++) P(x + ((k * 13 + (t * 6 | 0)) % w), base - 1 + (k % 2), T('#e6f2fa'));
-  const bx = x + 8 + Math.round((t * 2) % (w - 16));
-  R(bx, base - 3, 6, 1, T('#6b3f1f')); for (let j = 0; j < 5; j++) R(bx + 2, base - 8 + j, Math.min(j + 1, 3), 1, T('#f4f4f4'));
+function sail(x, y, s) {
+  R(x, y, 6 * s, s, T('#6b3f1f'));
+  for (let j = 0; j < 5 * s; j++) R(x + 2 * s, y - 1 - j, Math.max(1, Math.round((5 * s - j) * .5)), 1, T('#f4f4f4'));
 }
 function tram(x, base) {
   R(x, base - 9, 32, 8, T('#1f5fa8')); R(x, base - 5, 32, 2, T('#f4f4f4'));
@@ -696,7 +694,6 @@ function draw(t) {
     if (m < -140 || m > VW + 140) continue;
     if (c === 1) ankara(m - 10, MIDB + 3, cMid);
     if (c === 3) sagrada(m - 4, MIDB + 3, cMid, haze('#c9a8a8', .35));
-    if (c === 4) rolex(m - 6, MIDB + 3, haze('#e3ddd2', .25), haze('#8aa0b8', .3));
     if (c === 5) zurich(m - 10, MIDB + 3, cMid);
   }
   for (let k = kLo; k <= kHi; k++) {
@@ -704,14 +701,36 @@ function draw(t) {
     if (c === 3) balloonCam(Math.round(k * GAP * .8 + TSX + 74 - wx * .8), 36 + Math.round(Math.sin(t * 1.3) * 2), t);
     if (c === 6) constellation(Math.round(k * GAP * .85 + TSX + 70 - wx * .85), 26, cl(night * 1.6 + .25, 0, 1));
   }
+  // where Lausanne is, the dunes give way to Lake Geneva, which runs to the foot of the Alps
+  const lakes = [];
+  for (let k = kLo; k <= kHi; k++) if (chap(k) === 4) { const m = Math.round(k * GAP * .5 + TSX + 46 - wx * .5); lakes.push([m - 215, m + 185]); }
+  const WT = MIDB - 8, SHORE = GROUND - 3;
   for (let x = 0; x < VW; x++) {
     const mx = x + wx * .5, top = Math.round(MIDB + 2.5 * Math.sin(mx * .045) + 1.8 * Math.sin(mx * .11 + 2));
-    for (let y = top; y < GROUND; y++) buf[y * VW + x] = y === top ? haze('#ecc283', .2) : haze('#dcab69', .2);
+    const lk = lakes.find(([a, b]) => x >= a && x <= b);
+    if (!lk) { for (let y = top; y < GROUND; y++) buf[y * VW + x] = y === top ? haze('#ecc283', .2) : haze('#dcab69', .2); continue; }
+    // the shoreline curls in at both ends of the lake
+    const edge = Math.min(x - lk[0], lk[1] - x), wt = WT + Math.max(0, 12 - edge);
+    for (let y = Math.min(top, wt); y < wt; y++) buf[y * VW + x] = y === top ? haze('#ecc283', .2) : haze('#dcab69', .2);
+    for (let y = wt; y < SHORE; y++) {
+      // the water mirrors the mountains and sky above it, rippling
+      const ry = 2 * WT - y - 1, sx = cl(x + Math.round(Math.sin(y * 1.9 + t * 2.2)), 0, VW - 1), src = ry >= 0 ? buf[ry * VW + sx] : 0;
+      const water = mixc(tintRGB([79, 128, 168]), sky.bot, .25 - (y - WT) * .015);
+      const rc = [src & 255, (src >> 8) & 255, (src >> 16) & 255];
+      buf[y * VW + x] = pk(mixc(rc, water, .55 + (y - WT) * .025));
+      if (hash(x + Math.round(wx * .5), y + (t * 3 | 0)) > .985) buf[y * VW + x] = pk(mixc(water, [255, 255, 255], .6));
+    }
+    buf[SHORE * VW + x] = T('#c99a5c'); buf[(SHORE + 1) * VW + x] = T('#e6b870'); buf[(SHORE + 2) * VW + x] = T('#e6b870');
   }
   for (let k = kLo; k <= kHi; k++) {
     const c = chap(k), m = Math.round(k * GAP * .5 + TSX + 46 - wx * .5);
     if (m < -140 || m > VW + 140) continue;
-    if (c === 4) lake(m - 70, GROUND - 2, 70, t);
+    if (c === 4) {
+      // two sails drifting across, and the Rolex Learning Center on the near shore
+      sail(m - 150 + Math.round(mod(t * 2.5, 300)), WT + 4, 1);
+      sail(m + 120 - Math.round(mod(t * 1.6 + 90, 300)), WT + 8, 2);
+      rolex(m - 6, SHORE, haze('#e3ddd2', .15), haze('#8aa0b8', .2));
+    }
     if (c === 5) tram(m - 30 + Math.round(mod(t * 14, 110)), GROUND - 1);
   }
   for (let y = GROUND; y < VH; y++) for (let x = 0; x < VW; x++) {
@@ -793,7 +812,7 @@ function soundStart() {
     SND.wind = bed('bandpass', 480, .7);
     SND.beds = [
       bed('lowpass', 420, .7),                       // camp: the low roar of the fire
-      bed('bandpass', 650, .45),                     // Bilkent: a murmur of students
+      null,                                          // Bilkent: chalk only, below
       bed(null, 0, 0, [[100, .6], [200, .25], [300, .08]]),   // Çiçek Lab: equipment hum
       bed('bandpass', 1500, .35),                    // Near Space Labs: thin, high wind
       bed('lowpass', 650, .8),                       // EPFL: water on the lake shore
@@ -830,6 +849,11 @@ function sfxGrunt() {
   lfo.frequency.value = 22; lg.gain.value = 18; lfo.connect(lg).connect(o.frequency); lfo.start(t0); lfo.stop(t0 + .6);
   noiseHit(t0 + .05, .35, 700, 'lowpass', .08);
 }
+// a chalk stroke: a run of tiny scratches, the way chalk skips across a board
+function chalkStroke(t0, v) {
+  const n = Math.floor((.15 + Math.random() * .35) / .014), f = 2600 + Math.random() * 1800;
+  for (let i = 0; i < n; i++) noiseHit(t0 + i * .014 + Math.random() * .004, .01, f + Math.random() * 600, 'bandpass', (.04 + Math.random() * .08) * v);
+}
 // one cricket: three quick pulses
 function cricket(t0, v) { const f = 4100 + Math.random() * 500; for (let i = 0; i < 3; i++) tone(t0 + i * .045, 'sine', f, f * .98, .025, .05 * v, 8000); }
 // how close the camel is to the nearest stop of chapter c, from 1 (there) to 0 (far)
@@ -846,9 +870,10 @@ function soundTick(dt) {
   if (roll(14 * w[0])) noiseHit(now, .01 + Math.random() * .025, 2200 + Math.random() * 3000, 'highpass', (.06 + Math.random() * .22) * w[0]);
   if (roll(.8 * w[0])) noiseHit(now, .06, 900, 'bandpass', .3 * w[0]);
   if (roll(1.6 * (w[0] * night + w[6]))) cricket(now, w[0] + w[6]);
-  // Bilkent: chalk on the board
-  if (roll(3 * w[1])) noiseHit(now, .008, 3500, 'highpass', .12 * w[1]);
-  if (roll(.25 * w[1])) tone(now, 'sine', 2600, 2900, .05, .015 * w[1], 6000);
+  // Bilkent: chalk on the board, strokes, taps and the odd squeak
+  if (roll(1.4 * w[1])) chalkStroke(now, w[1]);
+  if (roll(.6 * w[1])) noiseHit(now, .006, 5000, 'highpass', .16 * w[1]);
+  if (roll(.15 * w[1])) tone(now, 'sine', 2700, 3100, .06, .02 * w[1], 8000);
   // Çiçek Lab: equipment beeps
   if (roll(.35 * w[2])) { tone(now, 'sine', 1320, 1320, .07, .05 * w[2], 5000); if (Math.random() < .4) tone(now + .12, 'sine', 1320, 1320, .07, .05 * w[2], 5000); }
   // Near Space Labs: the balloon camera's shutter, in time with its flash
