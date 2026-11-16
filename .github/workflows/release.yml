@@ -48,6 +48,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ steps.version.outputs.version }}" --target "$GITHUB_SHA" --title "${{ steps.version.outputs.version }}" --generate-notes
 
+      # the version also goes into the asset URLs, so browsers never run an old cached copy of the scripts
       - name: Stamp the version into the site
         run: |
           mkdir _site
