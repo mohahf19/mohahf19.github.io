@@ -281,14 +281,54 @@ function farH(fx) {
 }
 
 // ---------- props, one set per stop ----------
-function chalkboard(x, base) {
+// the chalkboard writes itself: Σ, { }, a dotted underline and a dot, then the eraser wipes it and it starts over.
+// strokes are in board pixels; CHALK is the timetable the drawing and the sound both read
+const CHALK = (() => {
+  const strokes = [
+    [[7, 3], [3, 3], [5, 5], [3, 7], [7, 7]],
+    [[13, 3], [12, 3], [12, 4], [11, 5], [12, 6], [12, 7], [13, 7]],
+    [[17, 3], [18, 3], [18, 4], [19, 5], [18, 6], [18, 7], [17, 7]],
+    [[3, 10], [19, 10]],
+  ];
+  const SPEED = 9, plan = []; let t = .6;
+  for (const pts of strokes) {
+    let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    plan.push({ pts, len, t0: t, t1: t + len / SPEED, dotted: pts.length === 2 }); t += len / SPEED + .45;
+  }
+  const tap = t, wipe0 = t + 2.6, wipe1 = wipe0 + 1.1;
+  return { plan, SPEED, tap, wipe0, wipe1, cycle: wipe1 + .7 };
+})();
+function strokeAt(pts, d) {
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1], [bx, by] = pts[i], l = Math.hypot(bx - ax, by - ay);
+    if (d <= l) return [ax + (bx - ax) * d / l, ay + (by - ay) * d / l]; d -= l;
+  }
+  return pts[pts.length - 1];
+}
+function chalkboard(x, base, t) {
   line(x + 3, base, x + 6, base - 18, T('#6b3f1f')); line(x + 21, base, x + 18, base - 18, T('#6b3f1f'));
-  R(x, base - 27, 25, 16, T('#7a4a28')); R(x + 1, base - 26, 23, 14, T('#2f3d32'));
-  const chalk = T('#e6e6d6');
-  ['11111', '01000', '00100', '01000', '11111'].forEach((r, j) => { for (let i = 0; i < 5; i++) if (r[i] === '1') P(x + 3 + i, base - 23 + j, chalk); });   // Σ
-  ['011', '010', '110', '010', '011'].forEach((r, j) => { for (let i = 0; i < 3; i++) { if (r[i] === '1') P(x + 11 + i, base - 23 + j, chalk); if (r[2 - i] === '1') P(x + 17 + i, base - 23 + j, chalk); } }); // { }
-  for (let i = 0; i < 17; i++) if (i % 2 === 0) P(x + 3 + i, base - 16, chalk);
-  P(x + 15, base - 21, T('#e8c050'));
+  R(x, base - 27, 25, 16, T('#7a4a28')); R(x + 1, base - 26, 23, 14, T('#2f3d32')); R(x, base - 12, 25, 1, T('#8a5a32'));   // frame and chalk tray
+  const bx = x + 1, by = base - 26, chalk = T('#e6e6d6'), u = mod(t, CHALK.cycle);
+  const wiped = u >= CHALK.wipe0 ? Math.min(24, (u - CHALK.wipe0) / (CHALK.wipe1 - CHALK.wipe0) * 24) : -1;
+  const dot = (px, py) => { px = Math.round(px); py = Math.round(py); if (px > wiped && u < CHALK.wipe1) P(bx + px, by + py, chalk); };
+  let pen = null;
+  for (const st of CHALK.plan) {
+    if (u < st.t0) break;
+    const d = Math.min(st.len, (u - st.t0) * CHALK.SPEED);
+    for (let k = 0; k <= d * 2; k++) { const [px, py] = strokeAt(st.pts, k / 2); if (!st.dotted || Math.round(px) % 2 === 1) dot(px, py); }
+    if (u < st.t1) pen = strokeAt(st.pts, d);
+  }
+  if (u >= CHALK.tap) dot(21, 5);
+  if (u >= CHALK.tap - .25 && u < CHALK.tap + .15) pen = [21, 5];
+  if (pen) {
+    // the chalk itself, held at an angle against the board
+    const [px, py] = pen.map(Math.round);
+    P(bx + px + 1, by + py - 1, chalk); P(bx + px + 2, by + py - 2, chalk); P(bx + px + 3, by + py - 3, T('#b8b8a8'));
+  } else if (wiped < 0 || u >= CHALK.wipe1) R(x + 16, base - 13, 3, 1, chalk);       // resting on the tray
+  if (wiped >= 0 && u < CHALK.wipe1) {
+    const ex = bx + Math.round(wiped) - 2, ey = by + 3 + Math.round(Math.abs(Math.sin(u * 9)) * 6);
+    R(ex, ey, 4, 3, T('#5a5a64')); R(ex, ey, 4, 1, T('#8a5a32'));
+  }
 }
 function books(x, base) {
   R(x, base - 3, 15, 3, T('#9b2f2f')); R(x + 1, base - 6, 13, 3, T('#33407a')); R(x + 2, base - 9, 12, 3, T('#3f7a3a'));
@@ -755,7 +795,7 @@ function draw(t) {
     if (STOPS[c].sign) sign(sx + 36, GROUND + 2, STOPS[c].sign);
     if (c === 0 && LANTERNS) lanterns(sx - 34, sx + 84, G1 - 26, t);
     if (c === 0) { palm(sx - 40, G1, 20); rug(sx + 19, G1, 20); fire(sx + 46, G1, t); dallah(sx + 56, G1); steam(sx + 59, G1 - 13, t); tent(sx + 78, G1, 28, 13); }
-    if (c === 1) { bilkentBanner(sx + 52, G1); chalkboard(sx + 96, G1); books(sx + 128, G1); }
+    if (c === 1) { bilkentBanner(sx + 52, G1); chalkboard(sx + 96, G1, t); books(sx + 128, G1); }
     if (c === 2) { helix(sx + 64, G1, t); scroll(sx + 80, G1); }
     if (c === 3) photoBoard(sx + 52, G1);
     if (c === 4) { epflBanner(sx + 50, G1); lectern(sx + 84, G1, t); }
@@ -850,9 +890,15 @@ function sfxGrunt() {
   noiseHit(t0 + .05, .35, 700, 'lowpass', .08);
 }
 // a chalk stroke: a run of tiny scratches, the way chalk skips across a board
-function chalkStroke(t0, v) {
-  const n = Math.floor((.15 + Math.random() * .35) / .014), f = 2600 + Math.random() * 1800;
-  for (let i = 0; i < n; i++) noiseHit(t0 + i * .014 + Math.random() * .004, .01, f + Math.random() * 600, 'bandpass', (.04 + Math.random() * .08) * v);
+function chalkStroke(t0, dur, v) {
+  if (dur < .05) return;
+  const c = SND.ctx, s = c.createBufferSource(), bp = c.createBiquadFilter(), hp = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = SND.noise; s.loop = true; s.playbackRate.value = .9 + Math.random() * .2;
+  bp.type = 'bandpass'; bp.frequency.value = 1900 + Math.random() * 500; bp.Q.value = .8; hp.type = 'highpass'; hp.frequency.value = 700;
+  const n = Math.max(8, Math.floor(dur * 45)), curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const e = Math.min(1, i / (n * .12), (n - 1 - i) / (n * .15)); curve[i] = (.45 + .55 * Math.random()) * .11 * v * Math.max(0, e); }
+  g.gain.setValueCurveAtTime(curve, t0, dur);
+  s.connect(bp).connect(hp).connect(g).connect(SND.master); s.start(t0, Math.random()); s.stop(t0 + dur + .05);
 }
 // one cricket: three quick pulses
 function cricket(t0, v) { const f = 4100 + Math.random() * 500; for (let i = 0; i < 3; i++) tone(t0 + i * .045, 'sine', f, f * .98, .025, .05 * v, 8000); }
@@ -870,10 +916,14 @@ function soundTick(dt) {
   if (roll(14 * w[0])) noiseHit(now, .01 + Math.random() * .025, 2200 + Math.random() * 3000, 'highpass', (.06 + Math.random() * .22) * w[0]);
   if (roll(.8 * w[0])) noiseHit(now, .06, 900, 'bandpass', .3 * w[0]);
   if (roll(1.6 * (w[0] * night + w[6]))) cricket(now, w[0] + w[6]);
-  // Bilkent: chalk on the board, strokes, taps and the odd squeak
-  if (roll(1.4 * w[1])) chalkStroke(now, w[1]);
-  if (roll(.6 * w[1])) noiseHit(now, .006, 5000, 'highpass', .16 * w[1]);
-  if (roll(.15 * w[1])) tone(now, 'sine', 2700, 3100, .06, .02 * w[1], 8000);
+  // Bilkent: the sound follows the chalk you can see: a scratch per stroke, a tap for the dot, the eraser's swish
+  const cu = mod(T0, CHALK.cycle), cp = SND.chalkU === undefined ? cu : SND.chalkU; SND.chalkU = cu;
+  const crossed = at => (cp < at && cu >= at) || (cp > cu && (at > cp || at <= cu));
+  if (w[1] > 0) {
+    for (const st of CHALK.plan) if (crossed(st.t0)) chalkStroke(now, st.t1 - st.t0, w[1]);
+    if (crossed(CHALK.tap)) noiseHit(now, .02, 1800, 'bandpass', .3 * w[1]);
+    if (crossed(CHALK.wipe0)) { const sw = CHALK.wipe1 - CHALK.wipe0; for (let i = 0; i < 4; i++) noiseHit(now + i * sw / 4, sw / 4 + .05, 900, 'lowpass', .1 * w[1]); }
+  }
   // Çiçek Lab: equipment beeps
   if (roll(.35 * w[2])) { tone(now, 'sine', 1320, 1320, .07, .05 * w[2], 5000); if (Math.random() < .4) tone(now + .12, 'sine', 1320, 1320, .07, .05 * w[2], 5000); }
   // Near Space Labs: the balloon camera's shutter, in time with its flash
