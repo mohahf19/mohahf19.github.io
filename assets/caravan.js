@@ -5,6 +5,18 @@ const STOPS = window.STORY.stops;
 const GAP = 300, NCH = STOPS.length, LOOP = NCH * GAP;
 const chap = k => ((k % NCH) + NCH) % NCH, mod = (a, m) => ((a % m) + m) % m;
 
+// ---------- the real calendar: the season, tonight's moon, Ramadan and Eid ----------
+const TODAY = (() => { const d = new URLSearchParams(location.hash.slice(1)).get('date'); return d ? new Date(d) : new Date(); })();
+const MONTH = TODAY.getMonth(), WINTER = MONTH === 11 || MONTH <= 1, SUMMER = MONTH >= 5 && MONTH <= 7;
+const MOON = (((TODAY - Date.UTC(2000, 0, 6, 18, 14)) / 864e5 / 29.530588853) % 1 + 1) % 1;   // 0 new, .5 full
+const HIJRI = (() => {
+  try {
+    const p = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric' }).formatToParts(TODAY);
+    return { m: +p.find(x => x.type === 'month').value, d: +p.find(x => x.type === 'day').value };
+  } catch (e) { return null; }
+})();
+const LANTERNS = !!HIJRI && (HIJRI.m === 9 || (HIJRI.m === 10 && HIJRI.d <= 3) || (HIJRI.m === 12 && HIJRI.d >= 10 && HIJRI.d <= 13));
+
 // ---------- screen ----------
 const jr = document.getElementById('jr'), cv = document.getElementById('cv'), cx = cv.getContext('2d');
 const VH = 180, GROUND = 140, HORIZON = 112, MIDB = 128;
@@ -62,7 +74,7 @@ function line(x0, y0, x1, y1, c) {
 function disc(x0, y0, r, c) { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + r * .6) P(x0 + x, y0 + y, c); }
 const GLYPH = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 6: '111100111101111', 7: '111001010010010', E: '111100111100111', P: '111101111100100', F: '111100111100100', L: '100100100100111', '/': '001001010100100',
   B: '110101110101110', I: '111010010010111', K: '101101110101101', N: '101111111111101', T: '111010010010010',
-  Z: '111001010100111', U: '101101101101111', R: '110101110101101', C: '111100100100111', H: '101101111101101' };
+  Z: '111001010100111', M: '101111111101101', G: '111100101101111', '!': '010010010000010', U: '101101101101111', R: '110101110101101', C: '111100100100111', H: '101101111101101' };
 function word(s, x, y, c) { for (const ch of s) { const g = GLYPH[ch]; if (g) for (let k = 0; k < 15; k++) if (g[k] === '1') P(x + k % 3, y + ((k / 3) | 0), c); x += 4; } }
 
 // ---------- the camel, laid out by hand (facing right; legs are separate) ----------
@@ -181,6 +193,10 @@ function drawCamel(gx, gy, phase, amp, kneel, rider, t) {
   const hy = (x, y) => (x >= 34 ? head : 0) + Math.round(drop(x));
   for (const [x, y] of outPx) P(ox + x, oy + y + hy(x, y), T('#3a2418'));
   for (const [x, y, c] of bodyPx) { const sx = ox + x, sy = oy + y + hy(x, y); P(sx, sy, T(c)); if (sx >= 0 && sy >= 0 && sx < VW && sy < VH) stampBuf[sy * VW + sx] = frameId; }
+  const fy = (x, y) => oy + y + hy(x, y);
+  if (mood.blink) P(ox + 42, fy(42, 2), T('#a8703f'));
+  if (mood.chew) { const open = (t * 7 | 0) % 2; P(ox + 46, fy(46, 3), T(open ? '#3a2418' : '#a8703f')); P(ox + 45, fy(45, 4), T(open ? '#a8703f' : '#3a2418')); }
+  if (mood.ear) { P(ox + 40, fy(40, 0) - 1, T('#a8703f')); P(ox + 40, fy(40, 0) - 2, T('#3a2418')); P(ox + 41, fy(40, 0) - 1, T('#3a2418')); }
   const sw = amp > .05 ? Math.round(Math.sin(phase * Math.PI * 2) * amp) : Math.round(Math.sin(t * 1.7) * 1.2);
   for (let k = 0; k < 8; k++) P(ox + 3 + (k > 4 ? sw : 0), oy + 8 + k + Math.round(drop(3)), T(k === 7 ? '#3a2418' : '#8c5a30'));
   for (const [x, y] of tassels) P(ox + x, oy + y + Math.round(drop(x)) + (amp > .5 && (x + (phase * 8 | 0)) % 4 === 0 ? 1 : 0), T('#e8c050'));
@@ -256,6 +272,7 @@ function zurich(x, base, c) {
 }
 const STARS = Array.from({ length: 90 }, (_, i) => [hash(i, 1), hash(i, 2) * .6, hash(i, 3)]);
 const tri = v => 1 - Math.abs(2 * (((v % 1) + 1) % 1) - 1);
+const SNOW_H = WINTER ? 14 : SUMMER ? 26 : 22, SNOW_D = WINTER ? 10 : SUMMER ? 3 : 5;
 function farH(fx) {
   let h = 7 + 4 * Math.sin(fx * .031) + 2.5 * Math.sin(fx * .083 + 1);
   const L4 = LOOP * .25, u = mod(fx - (TSX + 70), L4);
@@ -389,10 +406,39 @@ function steam(x, y, t) {
     if (u < .8 || (k & 1)) P(sx0, sy, pk(mixc(tintRGB([230, 226, 220]), sky.bot, u * .6)));
   }
 }
+function lanterns(x0, x1, y, t) {
+  const rope = T('#5a3418'), n = x1 - x0;
+  for (let i = 0; i <= n; i++) P(x0 + i, y + Math.round(Math.sin(i / n * Math.PI) * 6), rope);
+  for (let k = 1; k < 7; k++) {
+    const lx = x0 + Math.round(n * k / 7), ly = y + Math.round(Math.sin(k / 7 * Math.PI) * 6);
+    const glow = (Math.sin(t * 3 + k * 1.7) + 1) / 2, body = pk(mixc([235, 150, 40], [255, 214, 110], glow));
+    P(lx, ly + 1, rope); R(lx - 1, ly + 2, 3, 1, T('#9a7a2a')); R(lx - 1, ly + 3, 3, 4, body); P(lx, ly + 4, pk([255, 244, 200]));
+    R(lx - 1, ly + 7, 3, 1, T('#9a7a2a')); P(lx, ly + 8, T('#9a7a2a'));
+    if (night > .3) for (const [dx, dy] of [[-2, 4], [2, 4], [0, 1], [0, 9], [-2, 6], [2, 6]]) if ((dx + dy + (t * 4 | 0)) % 3) P(lx + dx, ly + dy, pk(mixc(sky.top, [255, 200, 90], .35)));
+  }
+}
+// winter: snow drifts over Lausanne and Zürich
+function snowfall(t, amt) {
+  for (let i = 0; i < 90; i++) {
+    if (hash(i, 9) > amt) continue;
+    const sp = 9 + hash(i, 4) * 14, x = mod(hash(i, 1) * VW + Math.sin(t * .8 + i) * 4 - wx * .15, VW), y = mod(hash(i, 2) * VH + t * sp, VH);
+    P(x, y, pk([248, 250, 255]));
+  }
+}
+// a camel's speech bubble
+function bubble(x, y, text) {
+  const w = text.length * 4 + 3;
+  R(x, y, w + 2, 9, T('#3a2418')); R(x + 1, y + 1, w, 7, pk([251, 241, 220]));
+  P(x + 3, y + 9, T('#3a2418')); P(x + 2, y + 10, T('#3a2418'));
+  word(text, x + 3, y + 2, T('#3a2418'));
+}
 function rug(x, base, w) { for (let i = 0; i < w; i++) { P(x + i, base, T('#8a2a2a')); P(x + i, base + 1, T(i % 3 ? '#8a2a2a' : '#e8c050')); } }
 
 // ---------- state ----------
 let campDir = 1, gaitAmp = 0;
+const mood = { blink: false, chew: false, ear: false }, say = { text: '', until: 0 };
+let rest = 0, grumbled = false, lastInput = 0, nextBlink = 2, nextChew = 4, nextEar = 7, chewUntil = 0, earUntil = 0, blinkUntil = 0, lastFoot = 0;
+const sayIt = (text, secs) => { say.text = text; say.until = T0 + secs; };
 let wx = 0, target = 0, vel = 0, phase = 0, dir = 1, T0 = 0, lastWheel = -9, foot = 0, hurry = 1;
 const CAMP_END = 3.6, prints = [], dust = [], meteors = [];
 let campT = CAMP_END;   // the story starts with the traveller already sitting by the fire
@@ -483,12 +529,14 @@ cv.addEventListener('click', e => {
     const tx = Math.round(k * GAP - wx + TSX) + 60;
     if (ix > tx - 6 && ix < tx + 18 && iy > GROUND - 30 && iy < GROUND + 4) { lens(true); return; }
   }
+  if (ix > TSX - 22 && ix < TSX + 24 && iy > GROUND - FOOT - 12 && iy < GROUND + 2) { sayIt(['GRR', 'HMPH', 'GRR!'][Math.random() * 3 | 0], 1.2); sfxGrunt(); }
   next();
 });
 document.getElementById('b-next').onclick = next;
 document.getElementById('b-prev').onclick = prevStop;
 document.getElementById('b-skip').onclick = () => skipToCamp(false);
 document.getElementById('b-jr').onclick = () => journal(true);
+for (const ev of ['pointerdown', 'wheel', 'keydown', 'touchstart']) addEventListener(ev, () => { lastInput = T0; }, { passive: true });
 jr.addEventListener('wheel', e => {
   if (jEl.classList.contains('on') || lEl.classList.contains('on')) return;
   e.preventDefault();
@@ -517,7 +565,7 @@ pg.innerHTML = `<button class="x" type="button" id="jx">close ✕</button><h2>TH
   STOPS.slice(1).reverse().map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text.replace(/ <a href="#" data-lens>[^<]*<\/a>\./, '')}</p></div></div>`).join('') +
   `<h3>WRITING &amp; TALKS</h3>` +
   (window.STORY.writing || []).map(s => `<div class="e"><div class="y">${s.when}</div><div><strong>${s.title.toUpperCase()}</strong><p>${s.text}</p></div></div>`).join('');
-function journal(on) { jEl.classList.toggle('on', on); }
+function journal(on) { jEl.classList.toggle('on', on); if (on) track('journal', 'opened the journal'); }
 document.getElementById('jx').onclick = () => journal(false);
 jEl.addEventListener('click', e => { if (e.target === jEl) journal(false); });
 box.addEventListener('click', e => {
@@ -578,7 +626,7 @@ function drawLens(dt) {
   const [sx0, sy0] = lpaths[0][0], [qx, qy] = lproj(sx0, sy0, surf(sx0, sy0) + .03);
   lx.fillStyle = '#ffffff'; lx.fillRect((qx | 0) - 1, (qy | 0) - 1, 3, 3);
 }
-function lens(on) { if (on) lensStart(false); lEl.classList.toggle('on', on); }
+function lens(on) { if (on) { lensStart(false); track('telescope', 'looked through the telescope'); } lEl.classList.toggle('on', on); }
 document.getElementById('l-new').onclick = () => lensStart(true);
 document.getElementById('l-x').onclick = () => lens(false);
 lEl.addEventListener('click', e => { if (e.target === lEl) lens(false); });
@@ -587,6 +635,9 @@ lEl.addEventListener('click', e => { if (e.target === lEl) lens(false); });
 function showStop(k) {
   if (shown === k) return;
   shown = k; const s = STOPS[chap(k)];
+  sfxOud(chap(k));
+  track('stop/' + s.title.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), s.title);
+  if (chap(k) === 0 && k > 0) track('lap', 'rode a full lap');
   bt.textContent = s.title.toUpperCase(); bw.textContent = s.when;
   fullHTML = chap(k) === 0 && k > 0 ? s.back : s.text; typed = 0; typing = true; bb.innerHTML = '';
   box.classList.add('on'); box.classList.remove('done');
@@ -624,13 +675,18 @@ function draw(t) {
     disc(sunX | 0, sunY | 0, 8, pk(mixc([255, 226, 140], [255, 140, 70], warm)));
   }
   if (my < HORIZON + 14) {
-    const behind = sky.bands[cl(Math.round((my - 2) / (HORIZON + 6) * 7), 0, 7)];
-    disc(mx | 0, my | 0, 7, pk([240, 236, 214])); disc((mx | 0) + 3, (my | 0) - 2, 6, behind);
+    // tonight's real phase: lit where the terminator says so, a faint earthshine elsewhere
+    const lit = pk([240, 236, 214]), dark = pk(mixc(sky.top, [240, 236, 214], .1)), tt = Math.cos(2 * Math.PI * MOON), r = 7;
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+      if (x * x + y * y > r * r + r * .6) continue;
+      const nx = x / r, w = Math.sqrt(Math.max(0, 1 - (y / r) ** 2)), on = MOON < .5 ? nx > tt * w : nx < -tt * w;
+      P((mx | 0) + x, (my | 0) + y, on ? lit : dark);
+    }
   }
   for (let x = 0; x < VW; x++) {
     const fx = x + wx * .25, h = farH(fx), top = Math.round(HORIZON - h), lit = farH(fx + 1) < h;
     for (let y = top; y < MIDB + 4; y++) {
-      const snow = h > 22 && y < top + Math.min(5, (h - 22) * .6 + 1);
+      const snow = h > SNOW_H && y < top + Math.min(SNOW_D, (h - SNOW_H) * .6 + 1);
       buf[y * VW + x] = snow ? haze(lit ? '#ffffff' : '#c9cbe0', .25) : h > 16 ? haze(lit ? '#a59cb6' : '#7b7392', .45) : haze('#c9a07a', .5);
     }
   }
@@ -679,6 +735,7 @@ function draw(t) {
     const G1 = GROUND + 1;
     // SCENES: what stands at each stop, by its position in story.js
     if (STOPS[c].sign) sign(sx + 36, GROUND + 2, STOPS[c].sign);
+    if (c === 0 && LANTERNS) lanterns(sx - 34, sx + 84, G1 - 26, t);
     if (c === 0) { palm(sx - 40, G1, 20); rug(sx + 19, G1, 20); fire(sx + 46, G1, t); dallah(sx + 56, G1); steam(sx + 59, G1 - 13, t); tent(sx + 78, G1, 28, 13); }
     if (c === 1) { bilkentBanner(sx + 52, G1); chalkboard(sx + 96, G1); books(sx + 128, G1); }
     if (c === 2) { helix(sx + 64, G1, t); scroll(sx + 80, G1); }
@@ -694,7 +751,7 @@ function draw(t) {
   for (const d of dust) P(scr(d.x), Math.round(d.y), pk(mixc(tintRGB(hex('#f3d9a6')), sky.bot, .2)));
 
   // the traveller, and at the camp: kneel, jump down, walk to the fire, sit
-  const kneel = smooth(0, 1.2, campT);
+  const kneel = smooth(0, 1.2, Math.max(campT, rest));
   drawCamel(TSX, GROUND + 1, phase, gaitAmp, kneel, campT < 1.2, t);
   if (campT >= 1.2) {
     const seatX = TSX + 10, seatY = GROUND + 1 - FOOT - 12 + DROP, landX = TSX + 24, sitX = fireX - 22, wdir = campDir;
@@ -706,8 +763,94 @@ function draw(t) {
       drawSprite(((w * 9) | 0) % 2 ? SPR.stand1 : SPR.stand0, Math.round(x), GROUND + 1 - 16 - (((w * 9) | 0) % 2), wdir, true);
     } else drawSprite(SPR.sit, sitX, GROUND + 1 - 13, 1, true);
   }
+  if (WINTER) { const u = mod(wx, LOOP) / GAP; snowfall(t, smooth(3.5, 4, u) * (1 - smooth(5.5, 6, u))); }
+  if (say.until > T0) bubble(TSX + 12, GROUND + 1 - FOOT - 22 + Math.round(smooth(0, 1.2, Math.max(campT, rest)) * DROP), say.text);
   cx.putImageData(img, 0, 0);
 }
+
+// ---------- visitor stats: GoatCounter events, once per visit each; nothing happens without its script ----------
+const counted = new Set();
+function track(path, title) {
+  if (counted.has(path) || !window.goatcounter || !window.goatcounter.count) return;
+  counted.add(path); window.goatcounter.count({ path, title, event: true });
+}
+
+// ---------- sound: off until asked for, all of it synthesised here ----------
+const SND = { on: false, ctx: null };
+const HIJAZ = [293.66, 311.13, 369.99, 392, 440, 466.16, 523.25, 587.33];   // maqam Hijaz on D
+const PHRASES = [[0, 1, 2, 3, 2, 1, 0], [4, 3, 2, 1, 2], [0, 2, 3, 4], [4, 5, 4, 3, 2], [3, 4, 5, 4, 3], [2, 3, 4, 6, 4], [4, 6, 7, 6, 4]];
+function soundStart() {
+  if (!SND.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+    const c = SND.ctx = new AC(), m = SND.master = c.createGain(); m.gain.value = .8; m.connect(c.destination);
+    const nb = SND.noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // wind: looping noise through a soft band-pass, swelling slowly
+    const src = c.createBufferSource(); src.buffer = nb; src.loop = true;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 480; bp.Q.value = .7;
+    SND.wind = c.createGain(); SND.wind.gain.value = 0; src.connect(bp).connect(SND.wind).connect(m); src.start();
+  }
+  SND.ctx.resume(); return true;
+}
+function noiseHit(t0, dur, freq, type, gain) {
+  const c = SND.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = SND.noise; s.playbackRate.value = .8 + Math.random() * .4; f.type = type; f.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + .005); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  s.connect(f).connect(g).connect(SND.master); s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + .05);
+}
+function tone(t0, type, f0, f1, dur, gain, filt) {
+  const c = SND.ctx, o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
+  o.type = type; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  f.type = 'lowpass'; f.frequency.value = filt;
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.connect(f).connect(g).connect(SND.master); o.start(t0); o.stop(t0 + dur + .05);
+  return o;
+}
+// padded feet in sand: a muffled thud and a little hiss
+function sfxStep(v) {
+  if (!SND.on || v < .3) return;
+  const t0 = SND.ctx.currentTime;
+  noiseHit(t0, .09, 420, 'lowpass', .18 * v); tone(t0, 'sine', 75, 45, .12, .22 * v, 400);
+}
+// a plucked, oud-like phrase in maqam Hijaz when you arrive
+function sfxOud(k) {
+  if (!SND.on) return;
+  const c = SND.ctx, notes = PHRASES[k % PHRASES.length], beat = k === 0 ? .32 : .2;
+  notes.forEach((n, i) => {
+    const t0 = c.currentTime + .05 + i * beat, last = i === notes.length - 1, f = c.createBiquadFilter(), g = c.createGain();
+    f.type = 'lowpass'; f.Q.value = 2; f.frequency.setValueAtTime(3200, t0); f.frequency.exponentialRampToValueAtTime(650, t0 + .3);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.09, t0 + .004); g.gain.exponentialRampToValueAtTime(.0001, t0 + (last ? 1.6 : .8));
+    for (const [type, det] of [['sawtooth', 0], ['triangle', 4]]) {
+      const o = c.createOscillator(); o.type = type; o.frequency.value = HIJAZ[n]; o.detune.value = det;
+      o.connect(f); o.start(t0); o.stop(t0 + (last ? 1.7 : .9));
+    }
+    f.connect(g).connect(SND.master);
+  });
+}
+// a camel's grumble: a low, wobbling growl and a breath
+function sfxGrunt() {
+  if (!SND.on) return;
+  const c = SND.ctx, t0 = c.currentTime, o = tone(t0, 'sawtooth', 120, 70, .55, .2, 650), lfo = c.createOscillator(), lg = c.createGain();
+  lfo.frequency.value = 22; lg.gain.value = 18; lfo.connect(lg).connect(o.frequency); lfo.start(t0); lfo.stop(t0 + .6);
+  noiseHit(t0 + .05, .35, 700, 'lowpass', .08);
+}
+// every frame: the wind swells, and near a camp the fire crackles
+function soundTick(dt) {
+  if (!SND.on || !SND.ctx) return;
+  const c = SND.ctx, wv = .035 + .02 * Math.sin(T0 * .31) + .015 * Math.sin(T0 * .13);
+  SND.wind.gain.setTargetAtTime(wv * (1 - night * .4), c.currentTime, .5);
+  const campNear = cl(1 - Math.abs(wx - Math.round(wx / LOOP) * LOOP) / 260, 0, 1);
+  if (campNear > 0 && Math.random() < dt * 8 * campNear) noiseHit(c.currentTime, .012 + Math.random() * .025, 2500 + Math.random() * 2500, 'highpass', (.08 + Math.random() * .2) * campNear);
+}
+const sndBtn = document.getElementById('b-snd');
+function setSound(on) {
+  if (on && !soundStart()) return;
+  SND.on = on; sndBtn.setAttribute('aria-pressed', on);
+  if (!on && SND.ctx) SND.ctx.suspend();
+  if (on) { track('sound', 'turned the sound on'); sfxOud(chap(nearest())); }
+}
+sndBtn.onclick = () => setSound(!SND.on);
+document.addEventListener('visibilitychange', () => { if (SND.ctx && SND.on) document.hidden ? SND.ctx.suspend() : SND.ctx.resume(); });
 
 let last = performance.now();
 function frame(now) {
@@ -718,7 +861,16 @@ function frame(now) {
   // at a camp he gets off and sits; leaving, he gets up, walks back and climbs on before the camel stands
   if (atCamp) { campT = Math.min(CAMP_END, campT + dt); campDir = 1; }
   else if (campT > 0) { campT = Math.max(0, campT - dt * 1.7); campDir = -1; }
-  const held = campT > 0 && !atCamp;
+  // a camel left standing at a stop long enough lies down; asked to move, it grumbles and gets up first
+  const atRest = chap(kN) !== 0 && Math.abs(wx - kN * GAP) < 1 && Math.abs(target - wx) < 1;
+  if (atRest && T0 - lastInput > 18) rest = Math.min(1.2, rest + dt);
+  else if (rest > 0 && !atRest) { if (!grumbled) { grumbled = true; sayIt('HMPH', 1.5); sfxGrunt(); } rest = Math.max(0, rest - dt * .8); }
+  if (rest === 0) grumbled = false;
+  if (T0 > nextBlink) { blinkUntil = T0 + .14; nextBlink = T0 + 2.5 + Math.random() * 4; }
+  if (T0 > nextChew && gaitAmp < .05) { chewUntil = T0 + 1.6 + Math.random() * 1.5; nextChew = T0 + 6 + Math.random() * 6; }
+  if (T0 > nextEar) { earUntil = T0 + .25; nextEar = T0 + 4 + Math.random() * 7; }
+  mood.blink = T0 < blinkUntil; mood.chew = T0 < chewUntil && gaitAmp < .05; mood.ear = T0 < earUntil;
+  const held = (campT > 0 && !atCamp) || (rest > 0 && !atRest);
   const max = 95 * hurry * cl(Math.abs(target - wx) / 140, 1, 12), want = held ? 0 : cl((target - wx) * 3, -max, max);
   vel += (want - vel) * Math.min(1, dt * 6);
   if (Math.abs(target - wx) < .4 && Math.abs(vel) < 2) { vel = 0; wx = target; hurry = 1; }
@@ -730,6 +882,8 @@ function frame(now) {
     dir = vel > 0 ? 1 : -1;
     // feet stay planted: one stance (60% of a cycle) covers one stride of ground
     phase += Math.abs(step) * .6 / STRIDE;
+    // two footfalls per stride: the near pair, then the far pair
+    if (Math.floor(phase * 2) !== lastFoot) { lastFoot = Math.floor(phase * 2); sfxStep(gaitAmp); }
     foot += Math.abs(step);
     if (foot > 5) { foot = 0; prints.push({ x: wx - 14 + (prints.length % 2 ? 3 : -2) + (prints.length % 4 > 1 ? 18 : 0), r: prints.length % 2 }); if (prints.length > 600) prints.shift(); }
     if (Math.random() < Math.abs(vel) * dt * .3) dust.push({ x: wx - 14 + Math.random() * 20, y: GROUND, vx: -dir * (4 + Math.random() * 6), vy: -4 - Math.random() * 5, life: .6 });
@@ -743,6 +897,7 @@ function frame(now) {
   const arrived = Math.abs(wx - kN * GAP) < 6 && Math.abs(vel) < 4, isCamp = chap(kN) === 0;
   if (arrived && (!isCamp || (atCamp && campT >= 2.9))) showStop(kN); else if (Math.abs(vel) > 12 || (isCamp && campT < 2.9)) hideStop();
   typeStep(dt);
+  soundTick(dt);
   drawMap(T0);
   yrBtns.forEach((b, i) => b.classList.toggle('here', shown !== null && chap(shown) === i));
   draw(T0);
