@@ -272,12 +272,11 @@ function zurich(x, base, c) {
 }
 const STARS = Array.from({ length: 90 }, (_, i) => [hash(i, 1), hash(i, 2) * .6, hash(i, 3)]);
 const tri = v => 1 - Math.abs(2 * (((v % 1) + 1) % 1) - 1);
-const SNOW_H = WINTER ? 14 : SUMMER ? 26 : 22, SNOW_D = WINTER ? 10 : SUMMER ? 3 : 5;
+const SNOW_H = WINTER ? 22 : SUMMER ? 44 : 34, SNOW_D = WINTER ? 16 : SUMMER ? 4 : 8;
+let alps = 0;   // 0 out in the desert, 1 at Lausanne and Zürich
 function farH(fx) {
   let h = 7 + 4 * Math.sin(fx * .031) + 2.5 * Math.sin(fx * .083 + 1);
-  const L4 = LOOP * .25, u = mod(fx - (TSX + 70), L4);
-  const a = smooth(3.55 * GAP * .25, 4.1 * GAP * .25, u) * (1 - smooth(5.5 * GAP * .25, 6.2 * GAP * .25, u));
-  if (a > 0) h += a * (26 * Math.pow(tri(fx / 52 + .2 * Math.sin(fx * .013)), 1.3) + 11 * tri(fx / 21 + .35));
+  if (alps > 0) h += alps * (8 + 42 * Math.pow(tri(fx / 58 + .2 * Math.sin(fx * .013)), 1.3) + 15 * tri(fx / 23 + .35));
   return h;
 }
 
@@ -635,7 +634,6 @@ lEl.addEventListener('click', e => { if (e.target === lEl) lens(false); });
 function showStop(k) {
   if (shown === k) return;
   shown = k; const s = STOPS[chap(k)];
-  sfxOud(chap(k));
   track('stop/' + s.title.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), s.title);
   if (chap(k) === 0 && k > 0) track('lap', 'rode a full lap');
   bt.textContent = s.title.toUpperCase(); bw.textContent = s.when;
@@ -656,6 +654,7 @@ function typeStep(dt) {
 function draw(t) {
   const p = mod(wx, LOOP) / LOOP;
   setTime(p);
+  alps = smooth(3.25, 3.9, p * NCH) * (1 - smooth(5.6, 6.3, p * NCH));
   jr.classList.toggle('day', night < .2 && p > .2 && p < .72);
   for (let y = 0; y < GROUND; y++) {
     const lv = y / (HORIZON + 6) * 7;
@@ -687,7 +686,7 @@ function draw(t) {
     const fx = x + wx * .25, h = farH(fx), top = Math.round(HORIZON - h), lit = farH(fx + 1) < h;
     for (let y = top; y < MIDB + 4; y++) {
       const snow = h > SNOW_H && y < top + Math.min(SNOW_D, (h - SNOW_H) * .6 + 1);
-      buf[y * VW + x] = snow ? haze(lit ? '#ffffff' : '#c9cbe0', .25) : h > 16 ? haze(lit ? '#a59cb6' : '#7b7392', .45) : haze('#c9a07a', .5);
+      buf[y * VW + x] = snow ? haze(lit ? '#ffffff' : '#c9cbe0', .25) : h > 18 ? haze(lit ? '#a59cb6' : '#7b7392', .45) : haze('#c9a07a', .5);
     }
   }
   // middle layer: the cities of each chapter, a lake for Lausanne, a tram for Zürich
@@ -776,19 +775,31 @@ function track(path, title) {
 }
 
 // ---------- sound: off until asked for, all of it synthesised here ----------
-const SND = { on: false, ctx: null };
-const HIJAZ = [293.66, 311.13, 369.99, 392, 440, 466.16, 523.25, 587.33];   // maqam Hijaz on D
-const PHRASES = [[0, 1, 2, 3, 2, 1, 0], [4, 3, 2, 1, 2], [0, 2, 3, 4], [4, 5, 4, 3, 2], [3, 4, 5, 4, 3], [2, 3, 4, 6, 4], [4, 6, 7, 6, 4]];
+// no music: footsteps, the camel's voice, and a background for each stop that fades in as you ride up
+const SND = { on: false, ctx: null, beds: [], lastShutter: 0, lastTram: 0 };
 function soundStart() {
   if (!SND.ctx) {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
     const c = SND.ctx = new AC(), m = SND.master = c.createGain(); m.gain.value = .8; m.connect(c.destination);
     const nb = SND.noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    // wind: looping noise through a soft band-pass, swelling slowly
-    const src = c.createBufferSource(); src.buffer = nb; src.loop = true;
-    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 480; bp.Q.value = .7;
-    SND.wind = c.createGain(); SND.wind.gain.value = 0; src.connect(bp).connect(SND.wind).connect(m); src.start();
+    // a looping bed: noise (or a hum) through a filter into its own gain, silent until a stop is near
+    const bed = (type, freq, q, hum) => {
+      const g = c.createGain(); g.gain.value = 0; g.connect(m);
+      if (hum) for (const [f, a] of hum) { const o = c.createOscillator(), og = c.createGain(); o.frequency.value = f; og.gain.value = a; o.connect(og).connect(g); o.start(); }
+      else { const s = c.createBufferSource(), f = c.createBiquadFilter(); s.buffer = nb; s.loop = true; s.playbackRate.value = .7 + Math.random() * .3; f.type = type; f.frequency.value = freq; f.Q.value = q; s.connect(f).connect(g); s.start(0, Math.random() * 1.9); }
+      return g;
+    };
+    SND.wind = bed('bandpass', 480, .7);
+    SND.beds = [
+      bed('lowpass', 420, .7),                       // camp: the low roar of the fire
+      bed('bandpass', 650, .45),                     // Bilkent: a murmur of students
+      bed(null, 0, 0, [[100, .6], [200, .25], [300, .08]]),   // Çiçek Lab: equipment hum
+      bed('bandpass', 1500, .35),                    // Near Space Labs: thin, high wind
+      bed('lowpass', 650, .8),                       // EPFL: water on the lake shore
+      bed('bandpass', 260, 1.1),                     // QuantCo: the server rack's fans
+      null,                                          // Research: crickets only, below
+    ];
   }
   SND.ctx.resume(); return true;
 }
@@ -812,21 +823,6 @@ function sfxStep(v) {
   const t0 = SND.ctx.currentTime;
   noiseHit(t0, .09, 420, 'lowpass', .18 * v); tone(t0, 'sine', 75, 45, .12, .22 * v, 400);
 }
-// a plucked, oud-like phrase in maqam Hijaz when you arrive
-function sfxOud(k) {
-  if (!SND.on) return;
-  const c = SND.ctx, notes = PHRASES[k % PHRASES.length], beat = k === 0 ? .32 : .2;
-  notes.forEach((n, i) => {
-    const t0 = c.currentTime + .05 + i * beat, last = i === notes.length - 1, f = c.createBiquadFilter(), g = c.createGain();
-    f.type = 'lowpass'; f.Q.value = 2; f.frequency.setValueAtTime(3200, t0); f.frequency.exponentialRampToValueAtTime(650, t0 + .3);
-    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.09, t0 + .004); g.gain.exponentialRampToValueAtTime(.0001, t0 + (last ? 1.6 : .8));
-    for (const [type, det] of [['sawtooth', 0], ['triangle', 4]]) {
-      const o = c.createOscillator(); o.type = type; o.frequency.value = HIJAZ[n]; o.detune.value = det;
-      o.connect(f); o.start(t0); o.stop(t0 + (last ? 1.7 : .9));
-    }
-    f.connect(g).connect(SND.master);
-  });
-}
 // a camel's grumble: a low, wobbling growl and a breath
 function sfxGrunt() {
   if (!SND.on) return;
@@ -834,20 +830,44 @@ function sfxGrunt() {
   lfo.frequency.value = 22; lg.gain.value = 18; lfo.connect(lg).connect(o.frequency); lfo.start(t0); lfo.stop(t0 + .6);
   noiseHit(t0 + .05, .35, 700, 'lowpass', .08);
 }
-// every frame: the wind swells, and near a camp the fire crackles
+// one cricket: three quick pulses
+function cricket(t0, v) { const f = 4100 + Math.random() * 500; for (let i = 0; i < 3; i++) tone(t0 + i * .045, 'sine', f, f * .98, .025, .05 * v, 8000); }
+// how close the camel is to the nearest stop of chapter c, from 1 (there) to 0 (far)
+const near = c => { const at = Math.round((wx - c * GAP) / LOOP) * LOOP + c * GAP; return cl(1 - Math.abs(wx - at) / 210, 0, 1); };
+// every frame: set each stop's background, and scatter its little events
 function soundTick(dt) {
   if (!SND.on || !SND.ctx) return;
-  const c = SND.ctx, wv = .035 + .02 * Math.sin(T0 * .31) + .015 * Math.sin(T0 * .13);
-  SND.wind.gain.setTargetAtTime(wv * (1 - night * .4), c.currentTime, .5);
-  const campNear = cl(1 - Math.abs(wx - Math.round(wx / LOOP) * LOOP) / 260, 0, 1);
-  if (campNear > 0 && Math.random() < dt * 8 * campNear) noiseHit(c.currentTime, .012 + Math.random() * .025, 2500 + Math.random() * 2500, 'highpass', (.08 + Math.random() * .2) * campNear);
+  const c = SND.ctx, now = c.currentTime, roll = r => Math.random() < dt * r;
+  const w = Array.from({ length: NCH }, (_, k) => near(k));
+  SND.wind.gain.setTargetAtTime((.03 + .015 * Math.sin(T0 * .31) + .01 * Math.sin(T0 * .13)) * (1 - night * .4), now, .5);
+  const lvl = [.16 * (.85 + .15 * Math.sin(T0 * 9) * Math.sin(T0 * 2.3)), .022 * (.7 + .3 * Math.sin(T0 * .9)), .02, .06 * (.6 + .4 * Math.sin(T0 * .5)), .05 * (.55 + .45 * Math.sin(T0 * 1.25)), .05];
+  SND.beds.forEach((g, k) => { if (g) g.gain.setTargetAtTime(lvl[k] * w[k], now, .3); });
+  // camp: crackles, the odd pop, crickets at night
+  if (roll(14 * w[0])) noiseHit(now, .01 + Math.random() * .025, 2200 + Math.random() * 3000, 'highpass', (.06 + Math.random() * .22) * w[0]);
+  if (roll(.8 * w[0])) noiseHit(now, .06, 900, 'bandpass', .3 * w[0]);
+  if (roll(1.6 * (w[0] * night + w[6]))) cricket(now, w[0] + w[6]);
+  // Bilkent: chalk on the board
+  if (roll(3 * w[1])) noiseHit(now, .008, 3500, 'highpass', .12 * w[1]);
+  if (roll(.25 * w[1])) tone(now, 'sine', 2600, 2900, .05, .015 * w[1], 6000);
+  // Çiçek Lab: equipment beeps
+  if (roll(.35 * w[2])) { tone(now, 'sine', 1320, 1320, .07, .05 * w[2], 5000); if (Math.random() < .4) tone(now + .12, 'sine', 1320, 1320, .07, .05 * w[2], 5000); }
+  // Near Space Labs: the balloon camera's shutter, in time with its flash
+  const flash = Math.floor(T0 / 3.2);
+  if (flash !== SND.lastShutter) { SND.lastShutter = flash; if (w[3] > 0) { noiseHit(now, .012, 4000, 'highpass', .25 * w[3]); noiseHit(now + .06, .015, 3000, 'highpass', .18 * w[3]); } }
+  // EPFL: a bird over the lake
+  if (roll(.3 * w[4])) for (let i = 0; i < 2; i++) tone(now + i * .11, 'sine', 2300 + Math.random() * 400, 3400, .08, .03 * w[4], 8000);
+  // QuantCo: the tram's bell
+  if (w[5] > 0 && T0 - SND.lastTram > 7 + Math.random() * 4) {
+    SND.lastTram = T0;
+    for (const dly of [0, .28]) { tone(now + dly, 'sine', 1046, 1040, .7, .06 * w[5], 9000); tone(now + dly, 'sine', 2620, 2600, .35, .02 * w[5], 9000); }
+  }
 }
 const sndBtn = document.getElementById('b-snd');
 function setSound(on) {
   if (on && !soundStart()) return;
   SND.on = on; sndBtn.setAttribute('aria-pressed', on);
   if (!on && SND.ctx) SND.ctx.suspend();
-  if (on) { track('sound', 'turned the sound on'); sfxOud(chap(nearest())); }
+  if (on) track('sound', 'turned the sound on');
 }
 sndBtn.onclick = () => setSound(!SND.on);
 document.addEventListener('visibilitychange', () => { if (SND.ctx && SND.on) document.hidden ? SND.ctx.suspend() : SND.ctx.resume(); });
