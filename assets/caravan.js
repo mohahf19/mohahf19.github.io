@@ -225,6 +225,39 @@ function palm(x, base, h) {
   }
   R(tx, ty + 1, 2, 2, T('#5a3a1a'));
 }
+// the sea: the road runs along the coast, so the Mediterranean shows behind the beach well before and after
+// the crossing; between shores a and b it comes forward into a bay, and the boat floats between sand and sea
+function sea(a, b, t) {
+  const M = 110, NEAR = 22, top = MIDB + 4;
+  for (let y = top; y < GROUND + NEAR; y++) {
+    const slope = y < GROUND ? -M : Math.round((y - GROUND) * .6), x0 = a + slope, x1 = b - slope;
+    for (let x = Math.max(0, x0); x < Math.min(VW, x1); x++) {
+      const wxr = x + Math.round(wx), crest = (y - top) % 7 === 1 && Math.sin(wxr * .35 + t * 3 + y) > .55;
+      let c = mixc([110, 160, 196], [46, 92, 140], (y - top) / (GROUND + NEAR - top));
+      if (crest || hash(wxr, y + (t * 3 | 0)) > .985) c = mixc(c, [255, 255, 255], .5);
+      buf[y * VW + x] = pk(tintRGB(c));
+    }
+    if (y >= GROUND) { P(x0 - 1, y, T('#d9a95e')); P(x1, y, T('#d9a95e')); }   // wet sand along the water's edge
+  }
+  for (let x = a + Math.round(NEAR * .6); x < b - Math.round(NEAR * .6); x++) P(x, GROUND + NEAR, T('#d9a95e'));
+}
+// palms around a pond, with the camel's drink at its near edge
+function oasis(x, base) {
+  for (let i = -20; i <= 20; i++) { const d = Math.round(Math.sqrt(1 - (i / 21) ** 2) * 3); for (let j = 0; j <= d; j++) P(x + i, base + 1 + j, T(j === 0 ? '#9ad0e0' : '#4f8fb8')); }
+  palm(x - 30, base, 22); palm(x - 44, base, 15); palm(x + 18, base, 12);
+  for (const g of [-38, -16, 12, 22]) { P(x + g, base, T('#3f7a3a')); P(x + g + 1, base - 1, T('#2f6430')); P(x + g + 2, base, T('#3f7a3a')); }
+}
+// a lateen-rigged dhow: mast and sail behind the camel, a planked hull hiding its legs
+function dhowSail(x, base) {
+  line(x - 32, base - 12, x - 32, base - 54, T('#5a3a1a'));
+  for (let j = 0; j < 36; j++) R(x - 33 - Math.round(j * .55), base - 50 + j, Math.round(j * .55), 1, T(j % 9 === 0 ? '#d8cfbd' : '#f2ead8'));
+  line(x - 33, base - 52, x - 56, base - 13, T('#5a3a1a'));
+}
+function dhowHull(x, base) {
+  for (let j = 0; j < 16; j++) { const inset = Math.round(j * j / 24); R(x - 38 + inset, base - 13 + j, 70 - inset * 2, 1, T(j === 0 ? '#3a2418' : j % 4 === 0 ? '#5a3418' : '#8a5530')); }
+  R(x + 29, base - 19, 3, 6, T('#8a5530')); R(x + 29, base - 20, 3, 1, T('#3a2418'));
+  for (let i = -30; i <= 22; i += 13) P(x + i, base - 8, T('#e8c050'));
+}
 function tent(x, base, w, h) {
   for (let j = 0; j < h; j++) { const inset = Math.round((h - j) * .6), y = base - h + j; for (let i = inset; i < w - inset * .4; i++) P(x + i, y, T(j % 3 === 0 ? '#6a4a36' : '#4a3426')); }
   R(x + (w >> 1), base - h + 3, 4, h - 3, T('#24160f'));
@@ -527,6 +560,8 @@ const mood = { blink: false, chew: false, ear: false }, say = { text: '', until:
 let rest = 0, grumbled = false, lastInput = 0, nextBlink = 2, nextChew = 4, nextEar = 7, chewUntil = 0, earUntil = 0, blinkUntil = 0, lastFoot = 0;
 const sayIt = (text, secs) => { say.text = text; say.until = T0 + secs; };
 let wx = 0, target = 0, vel = 0, phase = 0, dir = 1, T0 = 0, lastWheel = -9, foot = 0, hurry = 1;
+let atSea = false, oasisAt = null, oasisUntil = 0;
+const OASIS_AHEAD = 20;   // the pond lies just ahead of where the camel stops, under its head
 const CAMP_END = 3.6, prints = [], dust = [], meteors = [];
 let campT = CAMP_END;   // the story starts with the traveller already sitting by the fire
 const box = document.getElementById('box'), bt = document.getElementById('bt'), bw = document.getElementById('bw'), bb = document.getElementById('bb');
@@ -545,12 +580,13 @@ for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
   mbase[y * MW + x] = pk(c);
 }
 // Ankara to Barcelona rides the old Umayyad road: the Levant, Egypt, the Maghreb, then over the strait into al-Andalus
-// waypoints marked 'sea' on both ends are a water crossing: the camel takes a boat, slowly
+// waypoints marked 'sea' on both ends are a water crossing: the camel takes a boat, slowly; 'oasis' is a stop to drink
 const VIA = {
   'ankara>barcelona': [[35.32, 37.0], [37.16, 36.2], [36.29, 33.51], [35.21, 31.77], [33.8, 31.13], [31.24, 30.04], [29.92, 31.2], [28.95, 30.83], [27.24, 31.2], [25.15, 31.4], [23.96, 32.08], [20.07, 32.12], [20.23, 30.76], [18.57, 30.1], [16.59, 30.7],
-    [14.9, 31.9], [13.19, 32.6], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76, 'sea'], [-5.35, 36.14, 'sea'], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat, sea]) => [...geo(lon, lat), sea]),
+    [14.9, 31.9], [13.19, 32.6], [9.5, 30.13, 'oasis'], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76, 'sea'], [-5.35, 36.14, 'sea'], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat, sea]) => [...geo(lon, lat), sea]),
 };
-const SAIL = 8;   // a boat covers water this many times slower than a camel covers sand
+const SAIL = 60;   // a boat covers water this many times slower than a camel covers sand: long enough for the scene to show open sea
+const GHADAMES = geo(9.5, 30.13);
 function legPath(k) {
   const from = WHERE[chap(k)], to = WHERE[chap(k + 1)], a = CITY[from], b = CITY[to];
   if (VIA[from + '>' + to]) return [a, ...VIA[from + '>' + to], b];
@@ -564,8 +600,7 @@ function mapPos(f) {
   const e = u * u * (3 - 2 * u), path = legPath(k);
   if (path) {
     // walk the waypoints at an even pace, sailing slower
-    const sea = i => path[i][2] && path[i + 1][2];
-    const lens = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]) * (sea(i) ? SAIL : 1));
+    const sea = i => isSea(path, i), lens = legWeights(path);
     let s = e * lens.reduce((x, y) => x + y), i = 0;
     while (i < lens.length - 1 && s > lens[i]) s -= lens[i++];
     const t = lens[i] ? s / lens[i] : 0, p = path[i], q = path[i + 1], crossed = lens.some((_, j) => j < i && sea(j));
@@ -573,6 +608,27 @@ function mapPos(f) {
   }
   const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
   return [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e - Math.sin(Math.PI * e) * d * .22, 'before'];
+}
+const isSea = (path, i) => path[i][2] === 'sea' && path[i + 1][2] === 'sea';
+const legWeights = path => path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]) * (isSea(path, i) ? SAIL : 1));
+// where on a leg (as a share of the ride from 0 to 1, which is how the scene measures it) the crossing and the oasis fall
+const marks = new Map();
+function legMarks(k) {
+  const c = chap(k);
+  if (marks.has(c)) return marks.get(c);
+  const path = legPath(k); let m = null;
+  if (path) {
+    // the ride eases in and out, so undo the easing to turn a share of the road into a share of the ride
+    const lens = legWeights(path), total = lens.reduce((a, b) => a + b);
+    const share = e => { let lo = 0, hi = 1; for (let n = 0; n < 30; n++) { const u = (lo + hi) / 2; if (u * u * (3 - 2 * u) < e) lo = u; else hi = u; } return lo; };
+    let acc = 0; m = {};
+    path.forEach((p, i) => {
+      if (p[2] === 'oasis') m.oasis = share(acc / total);
+      if (i < lens.length) { if (isSea(path, i)) m.sea = [share(acc / total), share((acc + lens[i]) / total)]; acc += lens[i]; }
+    });
+  }
+  marks.set(c, m);
+  return m;
 }
 // the long roads get more dots so the trail stays as dense as the short hops
 const legDots = k => legPath(k) ? 3 : 1;
@@ -598,6 +654,13 @@ function lookFor(f, stretch) {
   if (VIA[to + '>' + from]) return 'umayyad';
   return CITY_LOOK[to];
 }
+// a palm over a pond marks the Ghadames oasis
+function mapOasis(put, sc) {
+  const x = Math.round(GHADAMES[0] * sc), y = Math.round(GHADAMES[1] * sc) + 1, leaf = pk([47, 100, 48]), pond = pk([70, 130, 190]), trunk = pk([110, 70, 40]);
+  for (let i = -2; i <= 2; i++) put(x + i, y + 1, pond);
+  put(x, y, trunk); put(x, y - 1, trunk); put(x, y - 2, trunk);
+  for (const [i, j] of [[-2, -2], [-1, -3], [0, -3], [1, -3], [2, -2]]) put(x + i, y + j, leaf);
+}
 let mapFace = 1;
 function mapCamel(put, sc, ink, fill) {
   const f = wx / GAP, [x, y, stretch] = mapPos(f), dx = mapPos(f + .02)[0] - x, back = target < wx - 1;
@@ -617,6 +680,7 @@ function drawMap(t) {
   mbuf.set(mbase);
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
   for (let k = 0; k < NCH; k++) { const n = 40 * legDots(k); for (let i = 0; i < n; i += 2) { const [x, y] = mapPos(k + i / n); MP(x, y, ink); } }
+  mapOasis(MP, 1);
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) MP(x + i, y + j, ink);
@@ -661,6 +725,7 @@ function drawBigMap(t) {
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
   bmBuf.set(bmBase);
   for (let k = 0; k < NCH; k++) { const n = 60 * legDots(k); for (let i = 0; i < n; i += 3) { const [x, y] = mapPos(k + i / n); B(x * 2, y * 2, ink); } }
+  mapOasis(B, 2);
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) B(x * 2 + i, y * 2 + j, ink);
@@ -714,6 +779,8 @@ const bmNow = document.getElementById('bmnow'), cityName = c => c === 'zurich' ?
 function bigMapNow() {
   let text;
   if (shown !== null) { const s = STOPS[chap(shown)]; text = s.sign ? `${s.sign} · ${s.title}, ${cityName(WHERE[chap(shown)])}` : `camp, ${cityName(WHERE[chap(shown)])}`; }
+  else if (T0 < oasisUntil) text = 'drinking at the Ghadames oasis…';
+  else if (atSea) text = 'sailing across the strait…';
   else if (moving()) text = `riding to ${cityName(WHERE[chap(target > wx ? Math.floor(wx / GAP) + 1 : Math.ceil(wx / GAP) - 1)])}…`;
   else text = cityName(WHERE[chap(nearest())]);
   if (bmNow.textContent !== text) bmNow.textContent = text;
@@ -733,7 +800,7 @@ function go(k) { target = Math.max(0, k) * GAP; }
 const moving = () => Math.abs(target - wx) > 1;
 function next() {
   if (typing) { finishTyping(); return; }
-  if (moving() && target > wx) { hurry = 2.6; return; }   // a second click hurries the camel along
+  if (moving() && target > wx) { hurry = 2.6; oasisUntil = 0; return; }   // a second click hurries the camel along
   const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k + 1 : (wx < k * GAP ? k : k + 1));
 }
 function prevStop() { hurry = 1; const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k - 1 : (wx > k * GAP ? k : k - 1)); }
@@ -824,6 +891,29 @@ function lensStart(random, s, v0) {
   s = s || (random ? [-2.6 + 5.2 * Math.random(), -2.6 + 5.2 * Math.random()] : [2.36, -1.25]);
   lpaths = [optPath(s[0], s[1], 0, v0), optPath(s[0], s[1], .9, v0)]; lensT = 0;
 }
+// press on the landscape to pick a start, pull back like a bow, let go: they shoot the opposite way of the pull
+const lunproj = (sx, sy) => {
+  // which point of the surface is under this pixel: solve the projection, then refine for the height there
+  let x = 0, y = 0, z = 0;
+  for (let k = 0; k < 24; k++) { const a = (sx / LS - 90) / 13, b = (sy / LS - 94 + z * 22) / 6.2; x = (a + b) / 2; y = (b - a) / 2; z = surf(cl(x, -3, 3), cl(y, -3, 3)); }
+  return Math.abs(x) <= 3 && Math.abs(y) <= 3 ? [x, y] : null;
+};
+let aim = null;
+const lensXY = e => { const r = lc.getBoundingClientRect(); return [(e.clientX - r.left - lc.clientLeft) / lc.clientWidth * LSZ, (e.clientY - r.top - lc.clientTop) / lc.clientHeight * LSZ]; };
+function aimVel() {
+  // the pull, reversed, as a step in the plane (ignoring height); long pulls are capped
+  const a = (aim.sx - aim.ex) / LS / 13, b = (aim.sy - aim.ey) / LS / 6.2, v = [(a + b) / 2 * .12, (b - a) / 2 * .12], m = Math.hypot(...v);
+  return m > .45 ? v.map(c => c * .45 / m) : v;
+}
+lc.addEventListener('pointerdown', e => {
+  const [sx, sy] = lensXY(e), p = lunproj(sx, sy);
+  if (!p) return;
+  const [qx, qy] = lproj(p[0], p[1], surf(...p));
+  aim = { p, sx: qx, sy: qy, ex: qx, ey: qy }; lc.setPointerCapture(e.pointerId);
+});
+lc.addEventListener('pointermove', e => { if (aim) [aim.ex, aim.ey] = lensXY(e); });
+lc.addEventListener('pointerup', () => { if (!aim) return; lensStart(false, aim.p, aimVel()); track('telescope/launch', 'launched the optimisers'); aim = null; });
+lc.addEventListener('pointercancel', () => { aim = null; });
 function lensSurface() {
   const c = document.createElement('canvas'); c.width = c.height = LSZ; const g = c.getContext('2d');
   g.fillStyle = '#0e1030'; g.fillRect(0, 0, LSZ, LSZ);
@@ -861,6 +951,14 @@ function drawLens(dt) {
   });
   const [sx0, sy0] = lpaths[0][0], [qx, qy] = lproj(sx0, sy0, surf(sx0, sy0) + .03);
   lx.fillStyle = '#ffffff'; lx.fillRect((qx | 0) - LS, (qy | 0) - LS, 3 * LS, 3 * LS);
+  if (aim) {
+    // a faint string back to the finger, and the arrow pointing the way they will fly
+    const tx = 2 * aim.sx - aim.ex, ty = 2 * aim.sy - aim.ey, ang = Math.atan2(ty - aim.sy, tx - aim.sx), hd = 7 * LS;
+    lx.strokeStyle = 'rgba(255,255,255,.35)'; lx.lineWidth = 1.5; lx.setLineDash([4, 4]); lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(aim.ex, aim.ey); lx.stroke(); lx.setLineDash([]);
+    lx.strokeStyle = '#ffffff'; lx.lineWidth = 3; lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(tx, ty);
+    for (const d of [-.5, .5]) { lx.moveTo(tx, ty); lx.lineTo(tx - Math.cos(ang + d) * hd, ty - Math.sin(ang + d) * hd); }
+    lx.stroke(); lx.fillStyle = '#ffffff'; lx.fillRect(aim.sx - 2 * LS, aim.sy - 2 * LS, 4 * LS, 4 * LS);
+  }
 }
 function lens(on) { if (on) { lensStart(false); track('telescope', 'looked through the telescope'); } lEl.classList.toggle('on', on); }
 document.getElementById('l-new').onclick = () => lensStart(true);
@@ -891,29 +989,6 @@ function typeStep(dt) {
 function draw(t) {
   const p = mod(wx, LOOP) / LOOP;
   setTime(p);
-// press on the landscape to pick a start, pull back like a bow, let go: they shoot the opposite way of the pull
-const lunproj = (sx, sy) => {
-  // which point of the surface is under this pixel: solve the projection, then refine for the height there
-  let x = 0, y = 0, z = 0;
-  for (let k = 0; k < 24; k++) { const a = (sx / LS - 90) / 13, b = (sy / LS - 94 + z * 22) / 6.2; x = (a + b) / 2; y = (b - a) / 2; z = surf(cl(x, -3, 3), cl(y, -3, 3)); }
-  return Math.abs(x) <= 3 && Math.abs(y) <= 3 ? [x, y] : null;
-};
-let aim = null;
-const lensXY = e => { const r = lc.getBoundingClientRect(); return [(e.clientX - r.left - lc.clientLeft) / lc.clientWidth * LSZ, (e.clientY - r.top - lc.clientTop) / lc.clientHeight * LSZ]; };
-function aimVel() {
-  // the pull, reversed, as a step in the plane (ignoring height); long pulls are capped
-  const a = (aim.sx - aim.ex) / LS / 13, b = (aim.sy - aim.ey) / LS / 6.2, v = [(a + b) / 2 * .12, (b - a) / 2 * .12], m = Math.hypot(...v);
-  return m > .45 ? v.map(c => c * .45 / m) : v;
-}
-lc.addEventListener('pointerdown', e => {
-  const [sx, sy] = lensXY(e), p = lunproj(sx, sy);
-  if (!p) return;
-  const [qx, qy] = lproj(p[0], p[1], surf(...p));
-  aim = { p, sx: qx, sy: qy, ex: qx, ey: qy }; lc.setPointerCapture(e.pointerId);
-});
-lc.addEventListener('pointermove', e => { if (aim) [aim.ex, aim.ey] = lensXY(e); });
-lc.addEventListener('pointerup', () => { if (!aim) return; lensStart(false, aim.p, aimVel()); track('telescope/launch', 'launched the optimisers'); aim = null; });
-lc.addEventListener('pointercancel', () => { aim = null; });
   alps = smooth(3.25, 3.9, p * NCH) * (1 - smooth(5.6, 6.3, p * NCH));
   jr.classList.toggle('day', night < .2 && p > .2 && p < .72);
   for (let y = 0; y < GROUND; y++) {
@@ -951,14 +1026,6 @@ lc.addEventListener('pointercancel', () => { aim = null; });
   }
   // middle layer: the cities of each chapter, a lake for Lausanne, a tram for Zürich
   const kLo = Math.floor((wx - TSX) / GAP) - 4, kHi = Math.ceil((wx - TSX + VW) / GAP) + 4, cMid = haze('#8f7488', .35);
-  if (aim) {
-    // a faint string back to the finger, and the arrow pointing the way they will fly
-    const tx = 2 * aim.sx - aim.ex, ty = 2 * aim.sy - aim.ey, ang = Math.atan2(ty - aim.sy, tx - aim.sx), hd = 7 * LS;
-    lx.strokeStyle = 'rgba(255,255,255,.35)'; lx.lineWidth = 1.5; lx.setLineDash([4, 4]); lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(aim.ex, aim.ey); lx.stroke(); lx.setLineDash([]);
-    lx.strokeStyle = '#ffffff'; lx.lineWidth = 3; lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(tx, ty);
-    for (const d of [-.5, .5]) { lx.moveTo(tx, ty); lx.lineTo(tx - Math.cos(ang + d) * hd, ty - Math.sin(ang + d) * hd); }
-    lx.stroke(); lx.fillStyle = '#ffffff'; lx.fillRect(aim.sx - 2 * LS, aim.sy - 2 * LS, 4 * LS, 4 * LS);
-  }
   for (let k = kLo; k <= kHi; k++) {
     const c = chap(k), m = Math.round(k * GAP * .5 + TSX + 46 - wx * .5);
     if (m < -140 || m > VW + 140) continue;
@@ -1009,6 +1076,12 @@ lc.addEventListener('pointercancel', () => { aim = null; });
     buf[y * VW + x] = y === GROUND ? T('#f6d697') : rip ? T('#d9a95e') : h < .05 ? T('#d4a155') : h > .985 ? T('#fbe3b0') : T('#ecbf75');
   }
   const scr = w => Math.round(w - wx + TSX);
+  // the Umayyad road's sea crossing and oasis stand in the scene exactly where the map puts them
+  for (let k = kLo; k <= kHi; k++) {
+    const m = legMarks(k); if (!m) continue;
+    if (m.sea) { const a = scr((k + m.sea[0]) * GAP), b = scr((k + m.sea[1]) * GAP); if (b > 0 && a < VW) sea(a, b, t); }
+    if (m.oasis != null) { const o = scr((k + m.oasis) * GAP); if (o > -80 && o < VW + 80) oasis(o + OASIS_AHEAD, GROUND + 1); }
+  }
   const campK = Math.round(wx / LOOP) * NCH, fireX = scr(campK * GAP + 46);
   if (night > .3 && fireX > -60 && fireX < VW + 60) {
     for (let y = GROUND - 44; y < VH; y++) for (let x = Math.max(0, fireX - 86); x < Math.min(VW, fireX + 86); x++) {
@@ -1039,8 +1112,10 @@ lc.addEventListener('pointercancel', () => { aim = null; });
   for (const d of dust) P(scr(d.x), Math.round(d.y), pk(mixc(tintRGB(hex('#f3d9a6')), sky.bot, .2)));
 
   // the traveller, and at the camp: kneel, jump down, walk to the fire, sit
-  const kneel = smooth(0, 1.2, Math.max(campT, rest));
-  drawCamel(TSX, GROUND + 1, phase, gaitAmp, kneel, campT < 1.2, t);
+  const kneel = smooth(0, 1.2, Math.max(campT, rest)), rock = atSea ? Math.round(Math.sin(t * 2.4)) : 0;
+  if (atSea) dhowSail(TSX, GROUND + 1 + rock);
+  drawCamel(TSX, GROUND + 1 + rock, phase, gaitAmp, kneel, campT < 1.2, t);
+  if (atSea) dhowHull(TSX, GROUND + 1 + rock);
   if (campT >= 1.2) {
     const seatX = TSX + 10, seatY = GROUND + 1 - FOOT - 12 + DROP, landX = TSX + 24, sitX = fireX - 22, wdir = campDir;
     if (campT < 1.8) {
@@ -1197,23 +1272,28 @@ function frame(now) {
   if (T0 > nextChew && gaitAmp < .05) { chewUntil = T0 + 1.6 + Math.random() * 1.5; nextChew = T0 + 6 + Math.random() * 6; }
   if (T0 > nextEar) { earUntil = T0 + .25; nextEar = T0 + 4 + Math.random() * 7; }
   mood.blink = T0 < blinkUntil; mood.chew = T0 < chewUntil && gaitAmp < .05; mood.ear = T0 < earUntil;
-  const held = (campT > 0 && !atCamp) || (rest > 0 && !atRest);
+  // on the desert road the camel stops once at the oasis to drink, unless hurried along
+  const kL = Math.floor(wx / GAP), om = legMarks(kL), ow = om && om.oasis != null ? (kL + om.oasis) * GAP : null;
+  if (ow !== null && target > ow && wx > ow - 34 && wx < ow && oasisAt !== ow && hurry === 1) { oasisAt = ow; oasisUntil = T0 + 2.8; sayIt('GLUG GLUG', 1.8); }
+  if (ow !== null && wx < ow - 80) oasisAt = null;
+  atSea = mapPos(wx / GAP)[2] === 'sea';
+  const held = (campT > 0 && !atCamp) || (rest > 0 && !atRest) || T0 < oasisUntil;
   const max = 95 * hurry * cl(Math.abs(target - wx) / 140, 1, 12), want = held ? 0 : cl((target - wx) * 3, -max, max);
   vel += (want - vel) * Math.min(1, dt * 6);
   if (Math.abs(target - wx) < .4 && Math.abs(vel) < 2) { vel = 0; wx = target; hurry = 1; }
   let step = vel * dt;
   if ((target - wx) * (target - wx - step) < 0) { step = target - wx; vel = 0; }   // never run past the stop
   wx += step;
-  gaitAmp += ((Math.abs(vel) > 3 ? 1 : 0) - gaitAmp) * Math.min(1, dt * 7);
+  gaitAmp += ((Math.abs(vel) > 3 && !atSea ? 1 : 0) - gaitAmp) * Math.min(1, dt * 7);
   if (Math.abs(vel) > 3) {
     dir = vel > 0 ? 1 : -1;
     // feet stay planted: one stance (60% of a cycle) covers one stride of ground
     phase += Math.abs(step) * .6 / STRIDE;
     // two footfalls per stride: the near pair, then the far pair
-    if (Math.floor(phase * 2) !== lastFoot) { lastFoot = Math.floor(phase * 2); sfxStep(gaitAmp); }
+    if (Math.floor(phase * 2) !== lastFoot) { lastFoot = Math.floor(phase * 2); if (!atSea) sfxStep(gaitAmp); }
     foot += Math.abs(step);
-    if (foot > 5) { foot = 0; prints.push({ x: wx - 14 + (prints.length % 2 ? 3 : -2) + (prints.length % 4 > 1 ? 18 : 0), r: prints.length % 2 }); if (prints.length > 600) prints.shift(); }
-    if (Math.random() < Math.abs(vel) * dt * .3) dust.push({ x: wx - 14 + Math.random() * 20, y: GROUND, vx: -dir * (4 + Math.random() * 6), vy: -4 - Math.random() * 5, life: .6 });
+    if (foot > 5 && !atSea) { foot = 0; prints.push({ x: wx - 14 + (prints.length % 2 ? 3 : -2) + (prints.length % 4 > 1 ? 18 : 0), r: prints.length % 2 }); if (prints.length > 600) prints.shift(); }
+    if (!atSea && Math.random() < Math.abs(vel) * dt * .3) dust.push({ x: wx - 14 + Math.random() * 20, y: GROUND, vx: -dir * (4 + Math.random() * 6), vy: -4 - Math.random() * 5, life: .6 });
   }
   if (night > .45 && Math.random() < dt * .25) meteors.push({ x: Math.random() * VW, y: Math.random() * 30, vx: 140 + Math.random() * 80, vy: 50 + Math.random() * 30, life: .5 });
   for (const m of meteors) { m.x += m.vx * dt; m.y += m.vy * dt; m.life -= dt; }
