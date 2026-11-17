@@ -765,7 +765,7 @@ function bigMapNow() {
   if (bmNow.textContent !== text) bmNow.textContent = text;
 }
 function bigMap(on) {
-  bmEl.classList.toggle('on', on);
+  bmEl.classList.toggle('on', on); jr.classList.toggle('mapping', on);
   if (!on) return;
   track('map', 'opened the big map');
   drawBigMap(T0); layoutCards();
@@ -956,7 +956,7 @@ function drawLens(dt) {
     lx.stroke(); lx.fillStyle = '#ffffff'; lx.fillRect(aim.sx - 2 * LS, aim.sy - 2 * LS, 4 * LS, 4 * LS);
   }
 }
-function lens(on) { if (on) { lensStart(false); track('telescope', 'looked through the telescope'); } lEl.classList.toggle('on', on); }
+function lens(on) { if (on) { bigMap(false); lensStart(false); track('telescope', 'looked through the telescope'); } lEl.classList.toggle('on', on); }
 document.getElementById('l-new').onclick = () => lensStart(true);
 document.getElementById('l-x').onclick = () => lens(false);
 lEl.addEventListener('click', e => { if (e.target === lEl) lens(false); });

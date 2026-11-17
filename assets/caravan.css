@@ -34,7 +34,9 @@ html,body{margin:0;height:100%;background:#1a1420;overflow:hidden}
 .box .more{position:absolute;right:12px;bottom:6px;font-size:20px;animation:blink 1s steps(2) infinite;opacity:0}
 .box.done .more{opacity:1}
 @keyframes blink{50%{visibility:hidden}}
-.bigmap{position:absolute;inset:0;background:rgba(20,14,24,.6);display:none;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;z-index:5}
+.bigmap{position:absolute;inset:0;background:rgba(20,14,24,.6);display:none;align-items:flex-start;justify-content:center;padding:20px 20px var(--boxroom);box-sizing:border-box;z-index:5;--boxroom:184px}
+/* with the big map open, the story box stays in front of it, in the room left below the map */
+.jr.mapping .box{z-index:6}
 .bigmap.on{display:flex}
 .bmp{background:var(--paper);color:var(--ink);border:4px solid var(--ink);box-shadow:8px 8px 0 rgba(30,18,24,.5);padding:18px 22px;box-sizing:border-box;width:min(1100px,100%);max-height:100%;overflow:auto}
 .bmp h2{font:600 22px/1.1 "Pixelify Sans",monospace;margin:0 0 12px;letter-spacing:.04em}
@@ -42,7 +44,7 @@ html,body{margin:0;height:100%;background:#1a1420;overflow:hidden}
 .bmp .hint{font-size:19px;color:#8a5a3a;margin:0 0 0 auto}
 .bmnav{display:flex;align-items:center;gap:14px;margin-top:10px}
 .bmnow{font:400 21px/1.1 VT323,monospace;color:var(--ink)}
-.bmw{position:relative;width:min(100%,calc((100vh - 220px) * 1.5));aspect-ratio:3/2;margin:0 auto;border:3px solid var(--ink);box-sizing:border-box}
+.bmw{position:relative;width:min(100%,calc((100vh - 220px - var(--boxroom)) * 1.5));aspect-ratio:3/2;margin:0 auto;border:3px solid var(--ink);box-sizing:border-box}
 .bmw canvas{position:absolute!important;inset:0;width:100%;height:100%;image-rendering:pixelated}
 .bmlines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #bmcam{pointer-events:none}
@@ -92,6 +94,7 @@ html,body{margin:0;height:100%;background:#1a1420;overflow:hidden}
   .mm{width:108px}.mm span{font-size:10px}.mm em{display:none}
   .ctl{gap:6px}.ctl button{font-size:17px;padding:3px 8px 4px}
   .box{bottom:14px;padding:10px 12px 12px}.box .b{font-size:20px;min-height:40px}.box .t strong{font-size:16px}.box .t em{font-size:16px}
+  .bigmap{--boxroom:150px}
   .journal .e{grid-template-columns:1fr}
 }
 /* phones on their side: everything slimmer so the scene stays in view */
@@ -103,6 +106,7 @@ html,body{margin:0;height:100%;background:#1a1420;overflow:hidden}
 }
 @media (max-height:500px){
   .bmp{padding:10px 14px}.bmp h2{font-size:16px;margin-bottom:6px}.bmp .x{font-size:16px;padding:0 6px}.bmp .hint{display:none}
-  .bmw{width:min(100%,calc((100vh - 120px) * 1.5))}
+  .bigmap{--boxroom:86px;padding-top:10px}
+  .bmw{width:min(100%,calc((100vh - 120px - var(--boxroom)) * 1.5))}
   .bmnav{margin-top:6px;gap:10px}.bmnow{font-size:17px}
 }
