@@ -901,7 +901,7 @@ const surf = (x, y) => .07 * (x * x + y * y) - 1.3 * Math.exp(-((x - 1.3) ** 2 +
   - .55 * Math.exp(-((x + .4) ** 2 + (y - 1.8) ** 2) / .35) + .18 * Math.sin(1.7 * x) * Math.cos(1.7 * y);
 const sgrad = (x, y) => { const h = 1e-4; return [(surf(x + h, y) - surf(x - h, y)) / (2 * h), (surf(x, y + h) - surf(x, y - h)) / (2 * h)]; };
 const lproj = (x, y, z) => [(90 + (x - y) * 13) * LS, (94 + (x + y) * 6.2 - z * 22) * LS];
-let lensT = 0, lpaths = null, lbg = null;
+let lensT = 0, lpaths = null, lbg = null, lbeta = .9, lfrom = null, lsettle = null, lscore = '';
 // a launch velocity is the first step for both; only momentum remembers it afterwards
 function optPath(x, y, beta, v0 = [0, 0]) {
   const pts = [[x, y]]; let [vx, vy] = v0;
@@ -911,7 +911,23 @@ function optPath(x, y, beta, v0 = [0, 0]) {
 }
 function lensStart(random, s, v0) {
   s = s || (random ? [-2.6 + 5.2 * Math.random(), -2.6 + 5.2 * Math.random()] : [2.36, -1.25]);
-  lpaths = [optPath(s[0], s[1], 0, v0), optPath(s[0], s[1], .9, v0)]; lensT = 0;
+  lfrom = [s, v0]; lpaths = [optPath(s[0], s[1], 0, v0), optPath(s[0], s[1], lbeta, v0)]; lensT = 0;
+  // the step after which a run stays within a hair of where it ends up
+  lsettle = lpaths.map(pts => { const [ex, ey] = pts[pts.length - 1]; let i = pts.length - 1; while (i > 0 && Math.hypot(pts[i - 1][0] - ex, pts[i - 1][1] - ey) < .01) i--; return i; });
+}
+// the momentum slider replays the same shot with the new β
+const betaIn = document.getElementById('l-beta'), betaOut = document.getElementById('l-bv'), scoreEl = document.getElementById('l-score');
+betaIn.addEventListener('input', () => { lbeta = +betaIn.value; betaOut.textContent = lbeta.toFixed(2); lensStart(false, ...lfrom); });
+// the scoreboard: each run's step and loss as it goes, then where it settled and which found the deeper valley
+function lensScore(n) {
+  const loss = lpaths.map(pts => surf(...pts[Math.min(n, pts.length - 1)])), done = n >= 240;
+  const rows = [['#ff5a4a', 'gradient descent'], ['#ffd84a', `momentum β ${lbeta.toFixed(2)}`]].map(([c, name], k) => {
+    const at = lsettle[k] >= 236 ? 'still moving' : `settled at step ${lsettle[k]}`;
+    const state = n >= lsettle[k] || done ? at : `step ${n}`;
+    const win = done && loss[k] < loss[1 - k] - .02 ? ' ★ deeper valley' : '';
+    return `<div><i style="background:${c}"></i>${name}: ${state}, loss ${loss[k].toFixed(2).replace('-', '−')}${win}</div>`;
+  }).join('');
+  if (rows !== lscore) { lscore = rows; scoreEl.innerHTML = rows; }
 }
 // press on the landscape to pick a start, pull back like a bow, let go: they shoot the opposite way of the pull
 const lunproj = (sx, sy) => {
@@ -964,6 +980,7 @@ function drawLens(dt) {
   if (!lbg) lbg = lensSurface();
   lx.imageSmoothingEnabled = false; lx.drawImage(lbg, 0, 0);
   const n = Math.min(240, Math.floor(lensT * 55));
+  lensScore(n);
   [['#ff5a4a', lpaths[0]], ['#ffd84a', lpaths[1]]].forEach(([c, pts]) => {
     lx.strokeStyle = c; lx.lineWidth = 2.5; lx.lineJoin = 'round'; lx.beginPath();
     for (let i = 0; i <= n; i++) { const [x, y] = pts[i], [px, py] = lproj(x, y, surf(x, y) + .03); i ? lx.lineTo(px, py) : lx.moveTo(px, py); }

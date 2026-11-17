@@ -41,6 +41,8 @@
     <p>A non-convex landscape, the kind my optimisation papers are about. Same starting point, two optimisers:</p>
     <p><i style="background:#ff5a4a"></i>gradient descent settles into the nearest valley<br><i style="background:#ffd84a"></i>with momentum it rolls over the ridge into a deeper one</p>
     <p class="aimhint">Launch them yourself: press where they start and pull back like a bow; let go and they fly the other way.</p>
+    <label class="beta">momentum β <input type="range" id="l-beta" min="0" max="0.99" step="0.01" value="0.9"><output id="l-bv">0.90</output></label>
+    <div class="score" id="l-score" aria-live="polite"></div>
     <div class="acts"><button id="l-new" type="button">try another start</button><button id="l-x" type="button">close ✕</button></div>
   </div></div></div>
 </div>
