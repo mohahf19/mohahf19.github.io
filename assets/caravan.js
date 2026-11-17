@@ -813,14 +813,16 @@ const surf = (x, y) => .07 * (x * x + y * y) - 1.3 * Math.exp(-((x - 1.3) ** 2 +
 const sgrad = (x, y) => { const h = 1e-4; return [(surf(x + h, y) - surf(x - h, y)) / (2 * h), (surf(x, y + h) - surf(x, y - h)) / (2 * h)]; };
 const lproj = (x, y, z) => [(90 + (x - y) * 13) * LS, (94 + (x + y) * 6.2 - z * 22) * LS];
 let lensT = 0, lpaths = null, lbg = null;
-function optPath(x, y, beta) {
-  const pts = [[x, y]]; let vx = 0, vy = 0;
+// a launch velocity is the first step for both; only momentum remembers it afterwards
+function optPath(x, y, beta, v0 = [0, 0]) {
+  const pts = [[x, y]]; let [vx, vy] = v0;
+  if (vx || vy) { x = cl(x + vx, -3, 3); y = cl(y + vy, -3, 3); pts.push([x, y]); }
   for (let i = 0; i < 240; i++) { const [a, b] = sgrad(x, y); vx = beta * vx - .05 * a; vy = beta * vy - .05 * b; x = cl(x + vx, -3, 3); y = cl(y + vy, -3, 3); pts.push([x, y]); }
   return pts;
 }
-function lensStart(random) {
-  const s = random ? [-2.6 + 5.2 * Math.random(), -2.6 + 5.2 * Math.random()] : [2.36, -1.25];
-  lpaths = [optPath(s[0], s[1], 0), optPath(s[0], s[1], .9)]; lensT = 0;
+function lensStart(random, s, v0) {
+  s = s || (random ? [-2.6 + 5.2 * Math.random(), -2.6 + 5.2 * Math.random()] : [2.36, -1.25]);
+  lpaths = [optPath(s[0], s[1], 0, v0), optPath(s[0], s[1], .9, v0)]; lensT = 0;
 }
 function lensSurface() {
   const c = document.createElement('canvas'); c.width = c.height = LSZ; const g = c.getContext('2d');
@@ -889,6 +891,29 @@ function typeStep(dt) {
 function draw(t) {
   const p = mod(wx, LOOP) / LOOP;
   setTime(p);
+// press on the landscape to pick a start, pull back like a bow, let go: they shoot the opposite way of the pull
+const lunproj = (sx, sy) => {
+  // which point of the surface is under this pixel: solve the projection, then refine for the height there
+  let x = 0, y = 0, z = 0;
+  for (let k = 0; k < 24; k++) { const a = (sx / LS - 90) / 13, b = (sy / LS - 94 + z * 22) / 6.2; x = (a + b) / 2; y = (b - a) / 2; z = surf(cl(x, -3, 3), cl(y, -3, 3)); }
+  return Math.abs(x) <= 3 && Math.abs(y) <= 3 ? [x, y] : null;
+};
+let aim = null;
+const lensXY = e => { const r = lc.getBoundingClientRect(); return [(e.clientX - r.left - lc.clientLeft) / lc.clientWidth * LSZ, (e.clientY - r.top - lc.clientTop) / lc.clientHeight * LSZ]; };
+function aimVel() {
+  // the pull, reversed, as a step in the plane (ignoring height); long pulls are capped
+  const a = (aim.sx - aim.ex) / LS / 13, b = (aim.sy - aim.ey) / LS / 6.2, v = [(a + b) / 2 * .12, (b - a) / 2 * .12], m = Math.hypot(...v);
+  return m > .45 ? v.map(c => c * .45 / m) : v;
+}
+lc.addEventListener('pointerdown', e => {
+  const [sx, sy] = lensXY(e), p = lunproj(sx, sy);
+  if (!p) return;
+  const [qx, qy] = lproj(p[0], p[1], surf(...p));
+  aim = { p, sx: qx, sy: qy, ex: qx, ey: qy }; lc.setPointerCapture(e.pointerId);
+});
+lc.addEventListener('pointermove', e => { if (aim) [aim.ex, aim.ey] = lensXY(e); });
+lc.addEventListener('pointerup', () => { if (!aim) return; lensStart(false, aim.p, aimVel()); track('telescope/launch', 'launched the optimisers'); aim = null; });
+lc.addEventListener('pointercancel', () => { aim = null; });
   alps = smooth(3.25, 3.9, p * NCH) * (1 - smooth(5.6, 6.3, p * NCH));
   jr.classList.toggle('day', night < .2 && p > .2 && p < .72);
   for (let y = 0; y < GROUND; y++) {
@@ -926,6 +951,14 @@ function draw(t) {
   }
   // middle layer: the cities of each chapter, a lake for Lausanne, a tram for Zürich
   const kLo = Math.floor((wx - TSX) / GAP) - 4, kHi = Math.ceil((wx - TSX + VW) / GAP) + 4, cMid = haze('#8f7488', .35);
+  if (aim) {
+    // a faint string back to the finger, and the arrow pointing the way they will fly
+    const tx = 2 * aim.sx - aim.ex, ty = 2 * aim.sy - aim.ey, ang = Math.atan2(ty - aim.sy, tx - aim.sx), hd = 7 * LS;
+    lx.strokeStyle = 'rgba(255,255,255,.35)'; lx.lineWidth = 1.5; lx.setLineDash([4, 4]); lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(aim.ex, aim.ey); lx.stroke(); lx.setLineDash([]);
+    lx.strokeStyle = '#ffffff'; lx.lineWidth = 3; lx.beginPath(); lx.moveTo(aim.sx, aim.sy); lx.lineTo(tx, ty);
+    for (const d of [-.5, .5]) { lx.moveTo(tx, ty); lx.lineTo(tx - Math.cos(ang + d) * hd, ty - Math.sin(ang + d) * hd); }
+    lx.stroke(); lx.fillStyle = '#ffffff'; lx.fillRect(aim.sx - 2 * LS, aim.sy - 2 * LS, 4 * LS, 4 * LS);
+  }
   for (let k = kLo; k <= kHi; k++) {
     const c = chap(k), m = Math.round(k * GAP * .5 + TSX + 46 - wx * .5);
     if (m < -140 || m > VW + 140) continue;
