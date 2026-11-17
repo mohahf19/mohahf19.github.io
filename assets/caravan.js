@@ -544,17 +544,72 @@ for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
   const c = l ? (coast ? [154, 107, 64] : ((x * 7 + y * 13) % 11 === 0 ? [224, 196, 140] : [239, 217, 168])) : (BAYER[(x & 3) + ((y & 3) << 2)] < 3 ? [70, 108, 140] : [79, 120, 153]);
   mbase[y * MW + x] = pk(c);
 }
+// Ankara to Barcelona rides the old Umayyad road: the Levant, Egypt, the Maghreb, then over the strait into al-Andalus
+const VIA = {
+  'ankara>barcelona': [[35.32, 37.0], [37.16, 36.2], [36.29, 33.51], [35.21, 31.77], [33.8, 31.13], [31.24, 30.04], [29.92, 31.2], [28.95, 30.83], [27.24, 31.2], [25.15, 31.4], [23.96, 32.08], [20.07, 32.12], [20.23, 30.76], [18.57, 30.1], [16.59, 30.7],
+    [14.9, 31.9], [13.19, 32.6], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76], [-5.35, 36.14], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat]) => geo(lon, lat)),
+};
+function legPath(k) {
+  const from = WHERE[chap(k)], to = WHERE[chap(k + 1)], a = CITY[from], b = CITY[to];
+  if (VIA[from + '>' + to]) return [a, ...VIA[from + '>' + to], b];
+  if (VIA[to + '>' + from]) return [a, ...[...VIA[to + '>' + from]].reverse(), b];
+  return null;
+}
 // the route between two stops is a gentle arc; long hops arc higher
 function mapPos(f) {
   const k = Math.floor(f), u = f - k, a = CITY[WHERE[chap(k)]], b = CITY[WHERE[chap(k + 1)]];
-  const e = u * u * (3 - 2 * u), d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const e = u * u * (3 - 2 * u), path = legPath(k);
+  if (path) {
+    // walk the waypoints at an even pace
+    const lens = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]));
+    let s = e * lens.reduce((x, y) => x + y), i = 0;
+    while (i < lens.length - 1 && s > lens[i]) s -= lens[i++];
+    const t = lens[i] ? s / lens[i] : 0, p = path[i], q = path[i + 1];
+    return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+  }
+  const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
   return [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e - Math.sin(Math.PI * e) * d * .22];
+}
+// the long roads get more dots so the trail stays as dense as the short hops
+const legDots = k => legPath(k) ? 3 : 1;
+// a tiny camel rides the route: it faces the way it is going, steps its legs as it covers ground,
+// and dresses for wherever it is: a saddle cloth (hump, then the back below it) and a hat over its head
+const MINI_CAMEL = ['......##', '..##..#.', '.######.', '.#####..'], MINI_LEGS = ['.#...#..', '..#...#.'];
+const RED = [200, 40, 40], WHITE = [251, 241, 220], GREEN = [40, 130, 60], BLUE = [40, 90, 170], NAVY = [70, 90, 190], FELT = [125, 115, 115];
+const LOOKS = {
+  turkish: { cloth: [RED, RED, RED, WHITE, RED], hat: [[6, -1, RED], [7, -1, RED]] },                                        // a fez
+  umayyad: { cloth: [WHITE, WHITE, WHITE, [232, 163, 58], WHITE], hat: [[5, -1, WHITE], [6, -1, WHITE], [7, -1, WHITE], [6, -2, WHITE]] },   // the white banner, a turban
+  andalusian: { cloth: [GREEN, GREEN, GREEN, WHITE, GREEN], hat: [[5, -1, FELT], [6, -1, FELT], [7, -1, FELT], [8, -1, FELT], [6, -2, FELT], [7, -2, FELT]] },   // a sombrero cordobés
+  vaud: { cloth: [GREEN, GREEN, WHITE, WHITE, WHITE], hat: [[6, -1, NAVY], [7, -1, NAVY], [8, -1, NAVY]] },                    // Vaud's green and white, a beret
+  zurich: { cloth: [BLUE, WHITE, WHITE, BLUE, BLUE], hat: [[5, -1, GREEN], [6, -1, GREEN], [7, -1, GREEN], [8, -1, GREEN], [7, -2, GREEN], [6, -2, RED]] },   // Zürich's blue and white, an alpine hat with a feather
+  road: { cloth: [], hat: [] },
+};
+const CLOTH_AT = [[2, 1], [3, 1], [2, 2], [3, 2], [4, 2]];
+function lookAt(x, y) {
+  const lon = x / MW * 64 - 12, lat = 58 - y / MH * 32;
+  if (lon > 26 && lon < 45 && lat > 36.7 && lat < 42.5) return 'turkish';
+  if (lon > 5.9 && lon < 10.5 && lat > 45.8 && lat < 47.8) return lon < 7.2 ? 'vaud' : 'zurich';
+  if (lon > -10 && lon < 3.5 && lat > 36 && lat < 43.8 && (lat > 37.5 || lon < -4.5)) return 'andalusian';
+  if (lat < 37) return 'umayyad';
+  return 'road';
+}
+let mapFace = 1;
+function mapCamel(put, sc, ink, fill) {
+  const f = wx / GAP, [x, y] = mapPos(f), dx = mapPos(f + .02)[0] - x, back = target < wx - 1;
+  if (Math.abs(dx) > .01) mapFace = Math.sign(dx) * (back ? -1 : 1);
+  const look = LOOKS[lookAt(x, y)], px = new Map(), flip = i => mapFace > 0 ? i : 7 - i;
+  [...MINI_CAMEL, MINI_LEGS[Math.floor(wx / 8) & 1]].forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') px.set(flip(i) + ',' + j, fill); }));
+  look.cloth.forEach((c, n) => px.set(flip(CLOTH_AT[n][0]) + ',' + CLOTH_AT[n][1], pk(c)));
+  for (const [i, j, c] of look.hat) px.set(flip(i) + ',' + j, pk(c));
+  const ox = Math.round(x * sc) - 4, oy = Math.round(y * sc) - 4;
+  for (const k of px.keys()) { const [i, j] = k.split(',').map(Number); for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!px.has((i + a) + ',' + (j + b))) put(ox + i + a, oy + j + b, ink); }
+  for (const [k, c] of px) { const [i, j] = k.split(',').map(Number); put(ox + i, oy + j, c); }
 }
 const MP = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < MW && y < MH) mbuf[y * MW + x] = c; };
 function drawMap(t) {
   mbuf.set(mbase);
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
-  for (let k = 0; k < NCH; k++) for (let i = 0; i < 40; i += 2) { const [x, y] = mapPos(k + i / 40); MP(x, y, ink); }
+  for (let k = 0; k < NCH; k++) { const n = 40 * legDots(k); for (let i = 0; i < n; i += 2) { const [x, y] = mapPos(k + i / n); MP(x, y, ink); } }
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) MP(x + i, y + j, ink);
@@ -564,9 +619,7 @@ function drawMap(t) {
   const bx = CITY.barcelona[0] - 1, by = CITY.barcelona[1] - 11 + Math.round(Math.sin(t * 1.5));
   for (const [i, j] of [[0, 0], [1, 0], [-1, 1], [0, 1], [1, 1], [2, 1], [-1, 2], [0, 2], [1, 2], [2, 2], [0, 3], [1, 3]]) MP(bx + i, by + j, cream);
   MP(bx + .5, by + 4, ink); MP(bx + .5, by + 5, ink);
-  // the traveller
-  const [tx, ty] = mapPos(wx / GAP);
-  if ((t * 3 | 0) % 4) { for (let j = -2; j <= 1; j++) for (let i = -2; i <= 2; i++) MP(tx + i, ty + j, ink); for (let i = -1; i <= 1; i++) { MP(tx + i, ty - 1, gold); MP(tx + i, ty, gold); } MP(tx + 1, ty - 2, gold); }
+  mapCamel(MP, 1, ink, gold);
   mx.putImageData(mimg, 0, 0);
   if (bmEl.classList.contains('on')) drawBigMap(t);
 }
@@ -590,6 +643,8 @@ const bmEl = document.getElementById('bigmap'), bmc = document.getElementById('b
 const BW2 = 240, BH2 = 160, LAND2 = Uint8Array.from(atob('AAAQPAAAAAAAAAB//+AIAAD/////////////////AAAA/IAAAAAAAAh//+AwAED/////////////////AAAN//wAAAAAADA//+BgA+D/////////////////AABE//wAAAAAAHI//+BgB/D/////////////////AAAC//gAAAAAB/Af/+hAB/H/////////////////AAAB//gAAAAADPAP/+AAB///////////////////AAAD//AAAAAAC/AH/9AAD///////////////////AAACf+AAAAAAC/wH/+AAD///////////////////AAAE/+AAAAAAH/wH/4AAD///////////////////AAAAv4AAAAAAD/Af8AAAD///////////////////AAACn/gAAAAAD+C34AAAD///////////////////AAAEn/wAAAAAD8PzwAAAD///////////////////AAAAX/4AAAAAD7nj4AAAB///////////////////AAAAH/4AAAAAB73wAAAAF///////////////////AAPcP/8AAAAAB5hADAAAB///////////////////AAP+Pn8AAAAAA6dAAAAA////////////////////AA/+AP8AAAAAA8GAAAfA////////////////////AAP/AP/gAAAAAcIDAB/h////////////////////AEf/CP/wAAAAB/wcAD//////////////////////AP/+ED/4AAAAA/x/g///////////////////////AP/4AD/wAAAAAf//////////////////////////AP/8AD/oAAAAB3//7///////////////////////Af/8AD/4AAAI////////////////////////////AH/8Df/8AAA+////////////////////////////AD/8B//8AAB/////////////////////////////AD/8C//5wAH/////////////////////////////AG/8A///4AP/////////////////////////////AH/8A///8AP/////////////////////////////AP/4B///4AP/////////////////////////////AP+AH///4Af/////////////////////////////A/4Af///wA//////////////////////////////APgAJ///AB//////////////////////////////AIAAAZ/+ADf/////////////////////////////AAAAAD//wH//////////////////////////////AAAAB///wf//////////////////////////////AAAAD///H///////////////////////////////AAAAH5mAH///////////////////////////////AAAAPwAAH///////////////////////////////AAAAYgAAH///////////////////////////////AAAAwAAAP///////////////////////////////AAAAAAAA////////////////////////////////AAAAAAAD////////////////////////////////AAAAABMD////////////////////////////////AAAAAAH/////////////////////////////////AAAAAAH/////////////////////////////////AAAAAAH/////////////////////////////////AAAAAcH/////////////////////////////////AAAAH///////////////////////////////////AAAAB///////////////////////////////////AAAAD///////////////////////////////////AAAAB///////////////////////////////////AAAAAH//////////////////////////////////AAAAAA//////////////////////////////////AAAAAAv/////////////////////////////////AAAAAAf////////////////////////w////////AAAAAAf///////////////////////8D///////gAAAAAAP///////////////////////gH//////+AAAAAAAP///////////////////8P/+Af//////wAAAAAAAB///////////////////8P/8AP//////wAAAAAAAB///////////////////4APwAH//////AAAAAAAAD///////////////////wAHwAf//////AAAAAAAAB////////8//////////AAfwA//////4AAAAAAAAA////////g//////////AA/4A//////gAAAAAAAAB////////g7/////////AAf/1//////gADAAAAAABf///////g1/////////AAH93//////AAHAAAAAAD////////wR////////7AAH4B//////AAPAAAAAAB////////gB////////4AAHAA/////+AAHAAAAAAD////////gA////////4AAGAAP////8AB/AAAAAAD/////+P/gAf///////wAAAAAD/////AA/AAAAAAD/////8H/wA////////wAAAAAB/////AAPAAAAAAD/////4B/8Af///////wAAAAAA/////gAPAAGAAAD/////AA/+AH///////wAAAAAAf////gAHAAP/wQH//+f+AA//AB///////wAAAAAAP////gAHAA///////8B8AA//gBf//////AAAAAAAD////gAHAD///////4AAAA//gAP//////AAAAAAAB////gABAB///////wAAAIf/gAP//////AAAAAAAAf///wABAB///////4AAAQP/wAB/////+AAAAAAAAP///wAAAA///////4AAA4H/wAA/////8AAAAAAAAH///4AAAA///////4AAB4B/4AAf////+AAAAAAAAH///4AAAA///////4AAA4B/8AAH/////AAAAAAAAH///8AAAA///////4AAAwA//8AH/////AAAf4AAAD///+AAAA///////wAAAwAf/4AD/////AAD/9AAAH////AAAA///////AAAAQAP/4AD/////gAH//gAAH////gAAA//////+AAAAAAD/8AD/////4Af//oAAf////gAAAf/////wAAAAYAAf/gD//////8////AB/////gAAA//////AAAAA4AAP/wD//9P8D////////////wAAA//////AAAAD4AAH/8D//xB4B////////////4AAA/////+AAAAD8AAB/+D/9wABH////////////+AAA/////8AAAAB4AAB/HD/80Bf/////////////9AAA/////8AAAAB4AAA+DB/8oB//////////////4AAB/////4AIgAB4AAAOBA/8AR//////////////wAAB/////wA8AAB4AAAOAB/+AB//////////////wAAB/////wAYAAB4AAAHgBf/ABP/////////////wAAD/////wAAAAB4AAAHgAf/ABf/////////////wAAD/////wIAAADgAAAHgAP+ABv/////////////wAAD/////4AAAAAAAAADAAH9gAP/////////////AAAB/////8IAAAAAAAAGAAL/QAf/////////////AAAC/////wAAAAAAAAAGAAD/sCv/////////////AAAA/////gAAAAAAAAAMAAQT8C//////////////AAAA/////gAAAAAAALDsAAB86AP/////////////AAAA/////AAAAAAAAP/gAAL+IgH/////////////gAAA/////AAAAAAAAP/AAAB/AAX/////////////gAAA////8AAAAAAAAD/AAAA9gAH/////////////wAAA////4AAAAAAEAA/AAAA+AAD/////////////+AAB8P//wAAAAAAeAAPAAAA+AYH//////////////AAAAD//wAAAAP3/YAHAAAAuACA//////////////gAAAH8AAAAf8///wABAAAAECACn8f/Of////////8AAADwAAAf/////wAAAAAABAAAD8H+A//////////AAADgAAB//////AAAAAAAAAABh4D8B//////////AAABgAAD//////AAAAAAAAAABAABgA//////////AAAAAAAH//////gAAAAAAAAAAAAAAA//////////AAABgAA///////wAAAAAAAAAAAAAAB//////////AAADwAB///////wAAAAAAAYAAAAABB//////////AAAD4EH///////4AAAAAAAf8AAAA8A//////////AAAD//v///////wAAAAAAAB+AAAB8A//////////AAAH//////////wAAAAAAAAAAAAD4A//////////AAAH//////////gAAAAAAAAAAAABgA//////////AAAH//////////AAAAAAAAAAAAAAAA//////////AAAP/////////+AAAAAAAAAAAAAAAB//////////AAAP/////////+AAAAAAAAAAAAAAAB//////////AAAf/////////+AAAAAAAAAAAAAAAD//////////AAB///////////AAAAAAAAAAAAAAAD//////////AAH///////////4AAAAAAAAAAAAAAH//////////AAf///////////4AAAAAAAAAAAAAAH//////////AA////////////+AAAAAAAAAAAAAAH//////////AA/////////////iAAAAAwAAAAAAAP//////////AB//////////////wAAAH+AAAAAAAP//////////AD//////////////8AAAP/AAAAAAAP//////////AD///////////////AAAf/AAAAAAAP//////////AD///////////////gAA//4AAAAAAf//////////AH///////////////gAA///gAAAAAf//////////AH///////////////gAA///gAAAAAf//////////AP///////////////wAA////gADoA///////////AP///////////////4AA////8APwB///////////AP////////////////wAf////A/6v///////////AP////////////////8A/////5//////////////AP/////////////////A////////////////////AH/////////////////h////////////////////AH/////////////////3//////////////////f/AH////////////////////////////////////B/AP///////////////////////////////////4B/AP/////////////////////////8/////////8A/Af/////////////////////////+/////////wAfA//////////////////////////+/v///////4AfA//////////////////////////+fv///////8APB///////////////////////////fv///////8APH///////////////////////////P////////8APH///////////////////////////vf///////+AHP///////////////////////////nf///////+AH////////////////////////////3P///////+AH////////////////////////////7H////////AD////////////////////////////4D////////AA////////////////////////////4D////////wA////////////////////////////8B////////wA////////////////////////////8B////////4A////////////////////////////8A////////8A////////////////////////////8Af///////+A////////////////////////////+Af///////+A////////////////////////////+AP///////+A/////////////////////////////AP///////+g'), c => c.charCodeAt(0));
 const isLand2 = (x, y) => x >= 0 && y >= 0 && x < BW2 && y < BH2 && (LAND2[(y * BW2 + x) >> 3] & (128 >> ((y * BW2 + x) & 7)));
 const bmImg = bmx.createImageData(BW2, BH2), bmBuf = new Uint32Array(bmImg.data.buffer), bmBase = new Uint32Array(BW2 * BH2);
+// the camel gets its own layer above the leader lines, so the dashes run under it
+const bcx = document.getElementById('bmcam').getContext('2d'), bcImg = bcx.createImageData(BW2, BH2), bcBuf = new Uint32Array(bcImg.data.buffer);
 for (let y = 0; y < BH2; y++) for (let x = 0; x < BW2; x++) {
   const l = isLand2(x, y), coast = l && (!isLand2(x + 1, y) || !isLand2(x - 1, y) || !isLand2(x, y + 1) || !isLand2(x, y - 1));
   bmBase[y * BW2 + x] = pk(l ? (coast ? [154, 107, 64] : ((x * 7 + y * 13) % 17 === 0 ? [226, 200, 146] : [239, 217, 168])) : (BAYER[(x & 3) + ((y & 3) << 2)] < 3 ? [70, 108, 140] : [79, 120, 153]));
@@ -598,18 +653,19 @@ function drawBigMap(t) {
   const B = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < BW2 && y < BH2) bmBuf[y * BW2 + x] = c; };
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
   bmBuf.set(bmBase);
-  for (let k = 0; k < NCH; k++) for (let i = 0; i < 60; i += 3) { const [x, y] = mapPos(k + i / 60); B(x * 2, y * 2, ink); }
+  for (let k = 0; k < NCH; k++) { const n = 60 * legDots(k); for (let i = 0; i < n; i += 3) { const [x, y] = mapPos(k + i / n); B(x * 2, y * 2, ink); } }
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) B(x * 2 + i, y * 2 + j, ink);
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) B(x * 2 + i, y * 2 + j, name === here ? gold : cream);
   }
-  const [tx, ty] = mapPos(wx / GAP);
-  if ((t * 3 | 0) % 4) { for (let j = -2; j <= 2; j++) for (let i = -3; i <= 3; i++) B(tx * 2 + i, ty * 2 + j, ink); for (let j = -1; j <= 1; j++) for (let i = -2; i <= 2; i++) B(tx * 2 + i, ty * 2 + j, gold); }
   bmx.putImageData(bmImg, 0, 0);
+  bcBuf.fill(0);
+  mapCamel((x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < BW2 && y < BH2) bcBuf[y * BW2 + x] = c; }, 2, ink, gold);
+  bcx.putImageData(bcImg, 0, 0);
 }
 // each city's card sits in open water or empty land, joined to its pin by a leader line
-const CARD_AT = { lausanne: [2, 6], zurich: [42, 4], barcelona: [3, 66], ankara: [63, 72] };
+const CARD_AT = { lausanne: [2, 6], zurich: [42, 4], barcelona: [3, 84], ankara: [70, 6] };
 const bmLines = document.getElementById('bmlines');
 for (const city of Object.keys(CITY)) {
   const box = document.createElement('div');
