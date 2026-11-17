@@ -545,63 +545,70 @@ for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
   mbase[y * MW + x] = pk(c);
 }
 // Ankara to Barcelona rides the old Umayyad road: the Levant, Egypt, the Maghreb, then over the strait into al-Andalus
+// waypoints marked 'sea' on both ends are a water crossing: the camel takes a boat, slowly
 const VIA = {
   'ankara>barcelona': [[35.32, 37.0], [37.16, 36.2], [36.29, 33.51], [35.21, 31.77], [33.8, 31.13], [31.24, 30.04], [29.92, 31.2], [28.95, 30.83], [27.24, 31.2], [25.15, 31.4], [23.96, 32.08], [20.07, 32.12], [20.23, 30.76], [18.57, 30.1], [16.59, 30.7],
-    [14.9, 31.9], [13.19, 32.6], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76], [-5.35, 36.14], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat]) => geo(lon, lat)),
+    [14.9, 31.9], [13.19, 32.6], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76, 'sea'], [-5.35, 36.14, 'sea'], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat, sea]) => [...geo(lon, lat), sea]),
 };
+const SAIL = 8;   // a boat covers water this many times slower than a camel covers sand
 function legPath(k) {
   const from = WHERE[chap(k)], to = WHERE[chap(k + 1)], a = CITY[from], b = CITY[to];
   if (VIA[from + '>' + to]) return [a, ...VIA[from + '>' + to], b];
   if (VIA[to + '>' + from]) return [a, ...[...VIA[to + '>' + from]].reverse(), b];
   return null;
 }
-// the route between two stops is a gentle arc; long hops arc higher
+// where the traveller is at story position f: [x, y, the stretch of road (before, sea, after a crossing)];
+// without waypoints the route between two stops is a gentle arc, and long hops arc higher
 function mapPos(f) {
   const k = Math.floor(f), u = f - k, a = CITY[WHERE[chap(k)]], b = CITY[WHERE[chap(k + 1)]];
   const e = u * u * (3 - 2 * u), path = legPath(k);
   if (path) {
-    // walk the waypoints at an even pace
-    const lens = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]));
+    // walk the waypoints at an even pace, sailing slower
+    const sea = i => path[i][2] && path[i + 1][2];
+    const lens = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]) * (sea(i) ? SAIL : 1));
     let s = e * lens.reduce((x, y) => x + y), i = 0;
     while (i < lens.length - 1 && s > lens[i]) s -= lens[i++];
-    const t = lens[i] ? s / lens[i] : 0, p = path[i], q = path[i + 1];
-    return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    const t = lens[i] ? s / lens[i] : 0, p = path[i], q = path[i + 1], crossed = lens.some((_, j) => j < i && sea(j));
+    return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, sea(i) ? 'sea' : crossed ? 'after' : 'before'];
   }
   const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  return [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e - Math.sin(Math.PI * e) * d * .22];
+  return [a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e - Math.sin(Math.PI * e) * d * .22, 'before'];
 }
 // the long roads get more dots so the trail stays as dense as the short hops
 const legDots = k => legPath(k) ? 3 : 1;
 // a tiny camel rides the route: it faces the way it is going, steps its legs as it covers ground,
-// and dresses for wherever it is: a saddle cloth (hump, then the back below it) and a hat over its head
+// and dresses for where it is headed: a saddle cloth (hump, then the back below it) and a hat over its head
 const MINI_CAMEL = ['......##', '..##..#.', '.######.', '.#####..'], MINI_LEGS = ['.#...#..', '..#...#.'];
-const RED = [200, 40, 40], WHITE = [251, 241, 220], GREEN = [40, 130, 60], BLUE = [40, 90, 170], NAVY = [70, 90, 190], FELT = [125, 115, 115];
+const RED = [200, 40, 40], WHITE = [251, 241, 220], GREEN = [40, 130, 60], BLUE = [40, 90, 170], NAVY = [70, 90, 190], FELT = [125, 115, 115], WOOD = [130, 80, 45];
 const LOOKS = {
   turkish: { cloth: [RED, RED, RED, WHITE, RED], hat: [[6, -1, RED], [7, -1, RED]] },                                        // a fez
   umayyad: { cloth: [WHITE, WHITE, WHITE, [232, 163, 58], WHITE], hat: [[5, -1, WHITE], [6, -1, WHITE], [7, -1, WHITE], [6, -2, WHITE]] },   // the white banner, a turban
   andalusian: { cloth: [GREEN, GREEN, GREEN, WHITE, GREEN], hat: [[5, -1, FELT], [6, -1, FELT], [7, -1, FELT], [8, -1, FELT], [6, -2, FELT], [7, -2, FELT]] },   // a sombrero cordobés
   vaud: { cloth: [GREEN, GREEN, WHITE, WHITE, WHITE], hat: [[6, -1, NAVY], [7, -1, NAVY], [8, -1, NAVY]] },                    // Vaud's green and white, a beret
   zurich: { cloth: [BLUE, WHITE, WHITE, BLUE, BLUE], hat: [[5, -1, GREEN], [6, -1, GREEN], [7, -1, GREEN], [8, -1, GREEN], [7, -2, GREEN], [6, -2, RED]] },   // Zürich's blue and white, an alpine hat with a feather
-  road: { cloth: [], hat: [] },
 };
+const CITY_LOOK = { ankara: 'turkish', barcelona: 'andalusian', lausanne: 'vaud', zurich: 'zurich' };
 const CLOTH_AT = [[2, 1], [3, 1], [2, 2], [3, 2], [4, 2]];
-function lookAt(x, y) {
-  const lon = x / MW * 64 - 12, lat = 58 - y / MH * 32;
-  if (lon > 26 && lon < 45 && lat > 36.7 && lat < 42.5) return 'turkish';
-  if (lon > 5.9 && lon < 10.5 && lat > 45.8 && lat < 47.8) return lon < 7.2 ? 'vaud' : 'zurich';
-  if (lon > -10 && lon < 3.5 && lat > 36 && lat < 43.8 && (lat > 37.5 || lon < -4.5)) return 'andalusian';
-  if (lat < 37) return 'umayyad';
-  return 'road';
+// the outfit goes on before setting off: the destination's, except on the Umayyad road, which is ridden
+// in Umayyad dress until the camel has crossed into al-Andalus
+function lookFor(f, stretch) {
+  if (!moving()) return CITY_LOOK[WHERE[chap(nearest())]];
+  const fwd = target > wx, from = WHERE[chap(fwd ? Math.floor(f) : Math.ceil(f))], to = WHERE[chap(fwd ? Math.floor(f) + 1 : Math.ceil(f) - 1)];
+  if (VIA[from + '>' + to]) return stretch === 'after' ? CITY_LOOK[to] : 'umayyad';
+  if (VIA[to + '>' + from]) return 'umayyad';
+  return CITY_LOOK[to];
 }
 let mapFace = 1;
 function mapCamel(put, sc, ink, fill) {
-  const f = wx / GAP, [x, y] = mapPos(f), dx = mapPos(f + .02)[0] - x, back = target < wx - 1;
+  const f = wx / GAP, [x, y, stretch] = mapPos(f), dx = mapPos(f + .02)[0] - x, back = target < wx - 1;
   if (Math.abs(dx) > .01) mapFace = Math.sign(dx) * (back ? -1 : 1);
-  const look = LOOKS[lookAt(x, y)], px = new Map(), flip = i => mapFace > 0 ? i : 7 - i;
-  [...MINI_CAMEL, MINI_LEGS[Math.floor(wx / 8) & 1]].forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') px.set(flip(i) + ',' + j, fill); }));
+  const look = LOOKS[lookFor(f, stretch)], px = new Map(), flip = i => mapFace > 0 ? i : 7 - i, boat = stretch === 'sea';
+  // in the boat the legs tuck away under a hull that rocks on the swell
+  [...MINI_CAMEL, ...(boat ? [] : [MINI_LEGS[Math.floor(wx / 8) & 1]])].forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') px.set(flip(i) + ',' + j, fill); }));
   look.cloth.forEach((c, n) => px.set(flip(CLOTH_AT[n][0]) + ',' + CLOTH_AT[n][1], pk(c)));
   for (const [i, j, c] of look.hat) px.set(flip(i) + ',' + j, pk(c));
-  const ox = Math.round(x * sc) - 4, oy = Math.round(y * sc) - 4;
+  if (boat) { for (let i = -1; i <= 8; i++) px.set(i + ',4', pk(WOOD)); for (let i = 0; i <= 7; i++) px.set(i + ',5', pk(WOOD)); }
+  const ox = Math.round(x * sc) - 4, oy = Math.round(y * sc) - 4 + (boat && Math.sin(T0 * 5) > 0 ? 1 : 0);
   for (const k of px.keys()) { const [i, j] = k.split(',').map(Number); for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!px.has((i + a) + ',' + (j + b))) put(ox + i + a, oy + j + b, ink); }
   for (const [k, c] of px) { const [i, j] = k.split(',').map(Number); put(ox + i, oy + j, c); }
 }
@@ -621,7 +628,7 @@ function drawMap(t) {
   MP(bx + .5, by + 4, ink); MP(bx + .5, by + 5, ink);
   mapCamel(MP, 1, ink, gold);
   mx.putImageData(mimg, 0, 0);
-  if (bmEl.classList.contains('on')) drawBigMap(t);
+  if (bmEl.classList.contains('on')) { drawBigMap(t); bigMapNow(); }
 }
 // ride to stop i within this lap, the short way (the camp is whichever end of the lap is nearer)
 function rideTo(i) {
@@ -675,7 +682,7 @@ for (const city of Object.keys(CITY)) {
     if (WHERE[i] !== city) return;
     const b = document.createElement('button'); b.type = 'button';
     b.dataset.long = s.sign ? `${s.sign} ${s.title}` : 'camp'; b.dataset.short = s.sign || 'camp'; b.title = s.title;
-    b.onclick = () => { rideTo(i); bigMap(false); };
+    b.onclick = () => rideTo(i);
     box.appendChild(b);
   });
   bmw.appendChild(box);
@@ -702,6 +709,15 @@ function layoutCards() {
   bmLines.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`); bmLines.innerHTML = svg;
 }
 addEventListener('resize', () => { if (bmEl.classList.contains('on')) layoutCards(); });
+// under the big map: the stop the camel stands at, or where it is riding to
+const bmNow = document.getElementById('bmnow'), cityName = c => c === 'zurich' ? 'Zürich' : c[0].toUpperCase() + c.slice(1);
+function bigMapNow() {
+  let text;
+  if (shown !== null) { const s = STOPS[chap(shown)]; text = s.sign ? `${s.sign} · ${s.title}, ${cityName(WHERE[chap(shown)])}` : `camp, ${cityName(WHERE[chap(shown)])}`; }
+  else if (moving()) text = `riding to ${cityName(WHERE[chap(target > wx ? Math.floor(wx / GAP) + 1 : Math.ceil(wx / GAP) - 1)])}…`;
+  else text = cityName(WHERE[chap(nearest())]);
+  if (bmNow.textContent !== text) bmNow.textContent = text;
+}
 function bigMap(on) {
   bmEl.classList.toggle('on', on);
   if (!on) return;
@@ -739,6 +755,8 @@ cv.addEventListener('click', e => {
 });
 document.getElementById('b-next').onclick = next;
 document.getElementById('b-prev').onclick = prevStop;
+document.getElementById('bm-next').onclick = next;
+document.getElementById('bm-prev').onclick = prevStop;
 const skipBtn = document.getElementById('b-skip');
 skipBtn.onclick = () => skipToCamp(false);
 document.getElementById('b-jr').onclick = () => journal(true);
@@ -751,7 +769,7 @@ jr.addEventListener('wheel', e => {
 }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { journal(false); lens(false); bigMap(false); }
-  if (jEl.classList.contains('on') || lEl.classList.contains('on') || bmEl.classList.contains('on')) return;
+  if (jEl.classList.contains('on') || lEl.classList.contains('on')) return;   // the big map rides along with the keys
   if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
   if (e.key === 'ArrowLeft') { e.preventDefault(); prevStop(); }
   if (e.key === 'End') skipToCamp(false);
