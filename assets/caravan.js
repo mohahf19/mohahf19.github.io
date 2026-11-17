@@ -241,12 +241,6 @@ function sea(a, b, t) {
   }
   for (let x = a + Math.round(NEAR * .6); x < b - Math.round(NEAR * .6); x++) P(x, GROUND + NEAR, T('#d9a95e'));
 }
-// palms around a pond, with the camel's drink at its near edge
-function oasis(x, base) {
-  for (let i = -20; i <= 20; i++) { const d = Math.round(Math.sqrt(1 - (i / 21) ** 2) * 3); for (let j = 0; j <= d; j++) P(x + i, base + 1 + j, T(j === 0 ? '#9ad0e0' : '#4f8fb8')); }
-  palm(x - 30, base, 22); palm(x - 44, base, 15); palm(x + 18, base, 12);
-  for (const g of [-38, -16, 12, 22]) { P(x + g, base, T('#3f7a3a')); P(x + g + 1, base - 1, T('#2f6430')); P(x + g + 2, base, T('#3f7a3a')); }
-}
 // a lateen-rigged dhow: mast and sail behind the camel, a planked hull hiding its legs
 function dhowSail(x, base) {
   line(x - 32, base - 12, x - 32, base - 54, T('#5a3a1a'));
@@ -560,8 +554,7 @@ const mood = { blink: false, chew: false, ear: false }, say = { text: '', until:
 let rest = 0, grumbled = false, lastInput = 0, nextBlink = 2, nextChew = 4, nextEar = 7, chewUntil = 0, earUntil = 0, blinkUntil = 0, lastFoot = 0;
 const sayIt = (text, secs) => { say.text = text; say.until = T0 + secs; };
 let wx = 0, target = 0, vel = 0, phase = 0, dir = 1, T0 = 0, lastWheel = -9, foot = 0, hurry = 1;
-let atSea = false, oasisAt = null, oasisUntil = 0;
-const OASIS_AHEAD = 20;   // the pond lies just ahead of where the camel stops, under its head
+let atSea = false;
 const CAMP_END = 3.6, prints = [], dust = [], meteors = [];
 let campT = CAMP_END;   // the story starts with the traveller already sitting by the fire
 const box = document.getElementById('box'), bt = document.getElementById('bt'), bw = document.getElementById('bw'), bb = document.getElementById('bb');
@@ -580,13 +573,12 @@ for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
   mbase[y * MW + x] = pk(c);
 }
 // Ankara to Barcelona rides the old Umayyad road: the Levant, Egypt, the Maghreb, then over the strait into al-Andalus
-// waypoints marked 'sea' on both ends are a water crossing: the camel takes a boat, slowly; 'oasis' is a stop to drink
+// waypoints marked 'sea' on both ends are a water crossing: the camel takes a boat, slowly
 const VIA = {
   'ankara>barcelona': [[35.32, 37.0], [37.16, 36.2], [36.29, 33.51], [35.21, 31.77], [33.8, 31.13], [31.24, 30.04], [29.92, 31.2], [28.95, 30.83], [27.24, 31.2], [25.15, 31.4], [23.96, 32.08], [20.07, 32.12], [20.23, 30.76], [18.57, 30.1], [16.59, 30.7],
-    [14.9, 31.9], [13.19, 32.6], [9.5, 30.13, 'oasis'], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76, 'sea'], [-5.35, 36.14, 'sea'], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat, sea]) => [...geo(lon, lat), sea]),
+    [14.9, 31.9], [13.19, 32.6], [11.22, 32.9], [9.9, 33.6], [10.1, 35.68], [3.06, 36.75], [-1.32, 34.88], [-5.0, 34.03], [-5.81, 35.76, 'sea'], [-5.35, 36.14, 'sea'], [-5.98, 37.39], [-4.78, 37.89], [-4.02, 39.86], [-0.88, 41.65]].map(([lon, lat, sea]) => [...geo(lon, lat), sea]),
 };
 const SAIL = 60;   // a boat covers water this many times slower than a camel covers sand: long enough for the scene to show open sea
-const GHADAMES = geo(9.5, 30.13);
 function legPath(k) {
   const from = WHERE[chap(k)], to = WHERE[chap(k + 1)], a = CITY[from], b = CITY[to];
   if (VIA[from + '>' + to]) return [a, ...VIA[from + '>' + to], b];
@@ -611,7 +603,7 @@ function mapPos(f) {
 }
 const isSea = (path, i) => path[i][2] === 'sea' && path[i + 1][2] === 'sea';
 const legWeights = path => path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]) * (isSea(path, i) ? SAIL : 1));
-// where on a leg (as a share of the ride from 0 to 1, which is how the scene measures it) the crossing and the oasis fall
+// where on a leg (as a share of the ride from 0 to 1, which is how the scene measures it) the sea crossing falls
 const marks = new Map();
 function legMarks(k) {
   const c = chap(k);
@@ -622,10 +614,7 @@ function legMarks(k) {
     const lens = legWeights(path), total = lens.reduce((a, b) => a + b);
     const share = e => { let lo = 0, hi = 1; for (let n = 0; n < 30; n++) { const u = (lo + hi) / 2; if (u * u * (3 - 2 * u) < e) lo = u; else hi = u; } return lo; };
     let acc = 0; m = {};
-    path.forEach((p, i) => {
-      if (p[2] === 'oasis') m.oasis = share(acc / total);
-      if (i < lens.length) { if (isSea(path, i)) m.sea = [share(acc / total), share((acc + lens[i]) / total)]; acc += lens[i]; }
-    });
+    lens.forEach((l, i) => { if (isSea(path, i)) m.sea = [share(acc / total), share((acc + l) / total)]; acc += l; });
   }
   marks.set(c, m);
   return m;
@@ -654,13 +643,6 @@ function lookFor(f, stretch) {
   if (VIA[to + '>' + from]) return 'umayyad';
   return CITY_LOOK[to];
 }
-// a palm over a pond marks the Ghadames oasis
-function mapOasis(put, sc) {
-  const x = Math.round(GHADAMES[0] * sc), y = Math.round(GHADAMES[1] * sc) + 1, leaf = pk([47, 100, 48]), pond = pk([70, 130, 190]), trunk = pk([110, 70, 40]);
-  for (let i = -2; i <= 2; i++) put(x + i, y + 1, pond);
-  put(x, y, trunk); put(x, y - 1, trunk); put(x, y - 2, trunk);
-  for (const [i, j] of [[-2, -2], [-1, -3], [0, -3], [1, -3], [2, -2]]) put(x + i, y + j, leaf);
-}
 let mapFace = 1;
 function mapCamel(put, sc, ink, fill) {
   const f = wx / GAP, [x, y, stretch] = mapPos(f), dx = mapPos(f + .02)[0] - x, back = target < wx - 1;
@@ -680,7 +662,6 @@ function drawMap(t) {
   mbuf.set(mbase);
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
   for (let k = 0; k < NCH; k++) { const n = 40 * legDots(k); for (let i = 0; i < n; i += 2) { const [x, y] = mapPos(k + i / n); MP(x, y, ink); } }
-  mapOasis(MP, 1);
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) MP(x + i, y + j, ink);
@@ -725,7 +706,6 @@ function drawBigMap(t) {
   const ink = pk([58, 36, 24]), gold = pk([232, 163, 58]), cream = pk([251, 241, 220]);
   bmBuf.set(bmBase);
   for (let k = 0; k < NCH; k++) { const n = 60 * legDots(k); for (let i = 0; i < n; i += 3) { const [x, y] = mapPos(k + i / n); B(x * 2, y * 2, ink); } }
-  mapOasis(B, 2);
   const here = shown !== null ? WHERE[chap(shown)] : null;
   for (const [name, [x, y]] of Object.entries(CITY)) {
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) B(x * 2 + i, y * 2 + j, ink);
@@ -779,7 +759,6 @@ const bmNow = document.getElementById('bmnow'), cityName = c => c === 'zurich' ?
 function bigMapNow() {
   let text;
   if (shown !== null) { const s = STOPS[chap(shown)]; text = s.sign ? `${s.sign} · ${s.title}, ${cityName(WHERE[chap(shown)])}` : `camp, ${cityName(WHERE[chap(shown)])}`; }
-  else if (T0 < oasisUntil) text = 'drinking at the Ghadames oasis…';
   else if (atSea) text = 'sailing across the strait…';
   else if (moving()) text = `riding to ${cityName(WHERE[chap(target > wx ? Math.floor(wx / GAP) + 1 : Math.ceil(wx / GAP) - 1)])}…`;
   else text = cityName(WHERE[chap(nearest())]);
@@ -800,7 +779,7 @@ function go(k) { target = Math.max(0, k) * GAP; }
 const moving = () => Math.abs(target - wx) > 1;
 function next() {
   if (typing) { finishTyping(); return; }
-  if (moving() && target > wx) { hurry = 2.6; oasisUntil = 0; return; }   // a second click hurries the camel along
+  if (moving() && target > wx) { hurry = 2.6; return; }   // a second click hurries the camel along
   const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k + 1 : (wx < k * GAP ? k : k + 1));
 }
 function prevStop() { hurry = 1; const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k - 1 : (wx > k * GAP ? k : k - 1)); }
@@ -1093,11 +1072,10 @@ function draw(t) {
     buf[y * VW + x] = y === GROUND ? T('#f6d697') : rip ? T('#d9a95e') : h < .05 ? T('#d4a155') : h > .985 ? T('#fbe3b0') : T('#ecbf75');
   }
   const scr = w => Math.round(w - wx + TSX);
-  // the Umayyad road's sea crossing and oasis stand in the scene exactly where the map puts them
+  // the Umayyad road's sea crossing stands in the scene exactly where the map puts it
   for (let k = kLo; k <= kHi; k++) {
-    const m = legMarks(k); if (!m) continue;
-    if (m.sea) { const a = scr((k + m.sea[0]) * GAP), b = scr((k + m.sea[1]) * GAP); if (b > 0 && a < VW) sea(a, b, t); }
-    if (m.oasis != null) { const o = scr((k + m.oasis) * GAP); if (o > -80 && o < VW + 80) oasis(o + OASIS_AHEAD, GROUND + 1); }
+    const m = legMarks(k);
+    if (m && m.sea) { const a = scr((k + m.sea[0]) * GAP), b = scr((k + m.sea[1]) * GAP); if (b > 0 && a < VW) sea(a, b, t); }
   }
   const campK = Math.round(wx / LOOP) * NCH, fireX = scr(campK * GAP + 46);
   if (night > .3 && fireX > -60 && fireX < VW + 60) {
@@ -1289,12 +1267,8 @@ function frame(now) {
   if (T0 > nextChew && gaitAmp < .05) { chewUntil = T0 + 1.6 + Math.random() * 1.5; nextChew = T0 + 6 + Math.random() * 6; }
   if (T0 > nextEar) { earUntil = T0 + .25; nextEar = T0 + 4 + Math.random() * 7; }
   mood.blink = T0 < blinkUntil; mood.chew = T0 < chewUntil && gaitAmp < .05; mood.ear = T0 < earUntil;
-  // on the desert road the camel stops once at the oasis to drink, unless hurried along
-  const kL = Math.floor(wx / GAP), om = legMarks(kL), ow = om && om.oasis != null ? (kL + om.oasis) * GAP : null;
-  if (ow !== null && target > ow && wx > ow - 34 && wx < ow && oasisAt !== ow && hurry === 1) { oasisAt = ow; oasisUntil = T0 + 2.8; sayIt('GLUG GLUG', 1.8); }
-  if (ow !== null && wx < ow - 80) oasisAt = null;
   atSea = mapPos(wx / GAP)[2] === 'sea';
-  const held = (campT > 0 && !atCamp) || (rest > 0 && !atRest) || T0 < oasisUntil;
+  const held = (campT > 0 && !atCamp) || (rest > 0 && !atRest);
   const max = 95 * hurry * cl(Math.abs(target - wx) / 140, 1, 12), want = held ? 0 : cl((target - wx) * 3, -max, max);
   vel += (want - vel) * Math.min(1, dt * 6);
   if (Math.abs(target - wx) < .4 && Math.abs(vel) < 2) { vel = 0; wx = target; hurry = 1; }
