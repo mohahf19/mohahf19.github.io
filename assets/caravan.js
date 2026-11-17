@@ -806,11 +806,12 @@ box.addEventListener('click', e => {
 });
 
 // ---------- through the telescope: a non-convex surface and two optimisers ----------
-const lEl = document.getElementById('lens'), lc = document.getElementById('lc'), lx = lc.getContext('2d'), LSZ = 180;
+// drawn at three times the old 180px so the surface stays smooth at telescope size
+const lEl = document.getElementById('lens'), lc = document.getElementById('lc'), lx = lc.getContext('2d'), LSZ = 540, LS = LSZ / 180;
 const surf = (x, y) => .07 * (x * x + y * y) - 1.3 * Math.exp(-((x - 1.3) ** 2 + (y - .9) ** 2) / .6) - .75 * Math.exp(-((x + 1.4) ** 2 + (y + 1.1) ** 2) / .45)
   - .55 * Math.exp(-((x + .4) ** 2 + (y - 1.8) ** 2) / .35) + .18 * Math.sin(1.7 * x) * Math.cos(1.7 * y);
 const sgrad = (x, y) => { const h = 1e-4; return [(surf(x + h, y) - surf(x - h, y)) / (2 * h), (surf(x, y + h) - surf(x, y - h)) / (2 * h)]; };
-const lproj = (x, y, z) => [90 + (x - y) * 13, 94 + (x + y) * 6.2 - z * 22];
+const lproj = (x, y, z) => [(90 + (x - y) * 13) * LS, (94 + (x + y) * 6.2 - z * 22) * LS];
 let lensT = 0, lpaths = null, lbg = null;
 function optPath(x, y, beta) {
   const pts = [[x, y]]; let vx = 0, vy = 0;
@@ -824,8 +825,8 @@ function lensStart(random) {
 function lensSurface() {
   const c = document.createElement('canvas'); c.width = c.height = LSZ; const g = c.getContext('2d');
   g.fillStyle = '#0e1030'; g.fillRect(0, 0, LSZ, LSZ);
-  for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(235,232,255,${.3 + hash(i, 7) * .6})`; g.fillRect(hash(i, 5) * LSZ | 0, hash(i, 6) * LSZ * .5 | 0, 1, 1); }
-  const N = 44, ramp = [[0, '#1b2a5a'], [.22, '#2f5fa0'], [.42, '#3f9aa0'], [.6, '#8cc47a'], [.8, '#e8cf7a'], [1, '#f0a060']];
+  for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(235,232,255,${.3 + hash(i, 7) * .6})`; g.fillRect(hash(i, 5) * LSZ | 0, hash(i, 6) * LSZ * .5 | 0, LS, LS); }
+  const N = 120, ramp = [[0, '#1b2a5a'], [.22, '#2f5fa0'], [.42, '#3f9aa0'], [.6, '#8cc47a'], [.8, '#e8cf7a'], [1, '#f0a060']];
   const col = h => { let i = 0; while (i < ramp.length - 2 && h > ramp[i + 1][0]) i++; const [a, ca] = ramp[i], [b, cb] = ramp[i + 1]; return mixc(hex(ca), hex(cb), cl((h - a) / (b - a), 0, 1)); };
   const X = i => -3 + 6 * i / N, Z = [];
   for (let i = 0; i <= N; i++) { Z[i] = []; for (let j = 0; j <= N; j++) Z[i][j] = surf(X(i), X(j)); }
@@ -838,8 +839,9 @@ function lensSurface() {
     g.fillStyle = `rgb(${cc.map(v => cl(v | 0, 0, 255)).join(',')})`;
     g.beginPath();
     for (const [a, b] of [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]) { const [px, py] = lproj(X(a), X(b), Z[a][b]); g.lineTo(px, py); }
-    g.closePath(); g.fill();
-    if (i % 4 === 0 || j % 4 === 0) { g.strokeStyle = 'rgba(10,8,30,.28)'; g.lineWidth = .5; g.stroke(); }
+    // a hairline in the cell's own colour hides the seams between neighbours; every tenth row and column gets a grid line
+    g.closePath(); g.fill(); g.strokeStyle = g.fillStyle; g.lineWidth = .8; g.stroke();
+    if (i % 10 === 0 || j % 10 === 0) { g.strokeStyle = 'rgba(10,8,30,.22)'; g.lineWidth = 1; g.stroke(); }
   }
   return c;
 }
@@ -849,14 +851,14 @@ function drawLens(dt) {
   lx.imageSmoothingEnabled = false; lx.drawImage(lbg, 0, 0);
   const n = Math.min(240, Math.floor(lensT * 55));
   [['#ff5a4a', lpaths[0]], ['#ffd84a', lpaths[1]]].forEach(([c, pts]) => {
-    lx.strokeStyle = c; lx.lineWidth = 1; lx.beginPath();
+    lx.strokeStyle = c; lx.lineWidth = 2.5; lx.lineJoin = 'round'; lx.beginPath();
     for (let i = 0; i <= n; i++) { const [x, y] = pts[i], [px, py] = lproj(x, y, surf(x, y) + .03); i ? lx.lineTo(px, py) : lx.moveTo(px, py); }
     lx.stroke();
     const [x, y] = pts[n], [px, py] = lproj(x, y, surf(x, y) + .03);
-    lx.fillStyle = '#1e1410'; lx.fillRect((px | 0) - 2, (py | 0) - 2, 5, 5); lx.fillStyle = c; lx.fillRect((px | 0) - 1, (py | 0) - 1, 3, 3);
+    lx.fillStyle = '#1e1410'; lx.fillRect((px | 0) - 2 * LS, (py | 0) - 2 * LS, 5 * LS, 5 * LS); lx.fillStyle = c; lx.fillRect((px | 0) - LS, (py | 0) - LS, 3 * LS, 3 * LS);
   });
   const [sx0, sy0] = lpaths[0][0], [qx, qy] = lproj(sx0, sy0, surf(sx0, sy0) + .03);
-  lx.fillStyle = '#ffffff'; lx.fillRect((qx | 0) - 1, (qy | 0) - 1, 3, 3);
+  lx.fillStyle = '#ffffff'; lx.fillRect((qx | 0) - LS, (qy | 0) - LS, 3 * LS, 3 * LS);
 }
 function lens(on) { if (on) { lensStart(false); track('telescope', 'looked through the telescope'); } lEl.classList.toggle('on', on); }
 document.getElementById('l-new').onclick = () => lensStart(true);
