@@ -699,6 +699,7 @@ function rideTo(i) {
   const k0 = Math.round(wx / GAP), lap = Math.floor(k0 / NCH) * NCH;
   let k = lap + i;
   if (i === 0 && Math.abs(lap + NCH - k0) < Math.abs(lap - k0)) k = lap + NCH;
+  if (watching) watch(false);
   hurry = 1; go(k);
 }
 // one button per stop
@@ -786,6 +787,7 @@ function bigMapNow() {
   if (bmNow.textContent !== text) bmNow.textContent = text;
 }
 function bigMap(on) {
+  if (!on && watching) watch(false);
   bmEl.classList.toggle('on', on);
   if (!on) return;
   track('map', 'opened the big map');
@@ -799,13 +801,15 @@ const nearest = () => Math.round(wx / GAP);
 function go(k) { target = Math.max(0, k) * GAP; }
 const moving = () => Math.abs(target - wx) > 1;
 function next() {
+  if (watching) watch(false);
   if (typing) { finishTyping(); return; }
   if (moving() && target > wx) { hurry = 2.6; oasisUntil = 0; return; }   // a second click hurries the camel along
   const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k + 1 : (wx < k * GAP ? k : k + 1));
 }
-function prevStop() { hurry = 1; const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k - 1 : (wx > k * GAP ? k : k - 1)); }
+function prevStop() { if (watching) watch(false); hurry = 1; const k = nearest(); go(Math.abs(wx - k * GAP) < 20 ? k - 1 : (wx > k * GAP ? k : k - 1)); }
 // straight to the next campfire, no riding
 function skipToCamp(openJournal) {
+  if (watching) watch(false);
   const k = nearest(), atCampNow = chap(k) === 0 && Math.abs(wx - k * GAP) < 1;
   if (!atCampNow) { wx = target = (Math.floor(k / NCH) + 1) * NCH * GAP; vel = 0; campT = CAMP_END; hurry = 1; prints.length = 0; dust.length = 0; }
   if (openJournal) journal(true);
@@ -824,6 +828,23 @@ document.getElementById('b-next').onclick = next;
 document.getElementById('b-prev').onclick = prevStop;
 document.getElementById('bm-next').onclick = next;
 document.getElementById('bm-prev').onclick = prevStop;
+// watch the journey: the camel rides on by itself, lingering at each stop long enough to read it, until it is back at the camp
+let watching = null;
+const watchBtn = document.getElementById('bm-watch');
+function watch(on) {
+  watching = on ? { from: nearest(), wait: 0 } : null;
+  watchBtn.textContent = on ? 'stop watching' : 'watch the journey'; watchBtn.setAttribute('aria-pressed', on);
+  if (on) { track('map/watch', 'watched the journey'); if (typing) finishTyping(); hurry = 1; go(nearest() + 1); }
+}
+watchBtn.onclick = () => watch(!watching);
+function watchTick(dt) {
+  if (!watching) return;
+  const settled = !moving() && shown !== null && !typing;
+  watching.wait = settled ? watching.wait + dt : 0;
+  if (watching.wait < 3.5) return;
+  if (chap(nearest()) === 0 && nearest() !== watching.from) watch(false);
+  else { watching.wait = 0; go(nearest() + 1); }
+}
 const skipBtn = document.getElementById('b-skip');
 skipBtn.onclick = () => skipToCamp(false);
 document.getElementById('b-jr').onclick = () => journal(true);
@@ -832,6 +853,7 @@ jr.addEventListener('wheel', e => {
   if (jEl.classList.contains('on') || lEl.classList.contains('on') || bmEl.classList.contains('on')) return;
   e.preventDefault();
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  if (watching) watch(false);
   target = Math.max(0, target + d * .55); lastWheel = T0; hurry = 1;
 }, { passive: false });
 addEventListener('keydown', e => {
@@ -1304,6 +1326,7 @@ function frame(now) {
   const arrived = Math.abs(wx - kN * GAP) < 6 && Math.abs(vel) < 4, isCamp = chap(kN) === 0;
   if (arrived && (!isCamp || (atCamp && campT >= 2.9))) showStop(kN); else if (Math.abs(vel) > 12 || (isCamp && campT < 2.9)) hideStop();
   typeStep(dt);
+  watchTick(dt);
   soundTick(dt);
   drawMap(T0);
   yrBtns.forEach((b, i) => b.classList.toggle('here', shown !== null && chap(shown) === i));
